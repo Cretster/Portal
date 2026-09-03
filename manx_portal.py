@@ -328,6 +328,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.session_state.current_zone_info = None
     if 'current_display_label' not in st.session_state:
         st.session_state.current_display_label = ""
+    if 'selected_coords' not in st.session_state:
+        st.session_state.selected_coords = ""
     
     location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
     
@@ -338,47 +340,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     if location_mode == "🗺️ pH Map Click":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🗺️ Click on the map to select a location")
-        st.sidebar.markdown("Click anywhere on the map - the location will be selected automatically!")
-        
-        # Check for coordinates from query params (set by the map click)
-        lat_param = st.query_params.get('map_lat')
-        lon_param = st.query_params.get('map_lon')
-        
-        if lat_param is not None and lon_param is not None:
-            try:
-                lat = float(lat_param)
-                lon = float(lon_param)
-                
-                # Get elevation bonus
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {
-                    "name": f"pH Map Location ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus
-                }
-                display_label = f"📍 {lat:.5f}, {lon:.5f}"
-                st.sidebar.success(f"✅ Location loaded from map click!")
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-                
-                # Store in session state
-                st.session_state.current_zone_info = zone_info
-                st.session_state.current_display_label = display_label
-                
-                # Clear the query params after using them
-                st.query_params.clear()
-            except Exception as e:
-                st.sidebar.warning(f"⚠️ Could not process location: {e}")
-                zone_info = None
-        else:
-            # Check if we have a stored location
-            if st.session_state.current_zone_info is not None:
-                zone_info = st.session_state.current_zone_info
-                display_label = st.session_state.current_display_label
-                st.sidebar.info(f"📍 Using saved location: {display_label}")
-            else:
-                st.sidebar.info("👆 Click anywhere on the map above to auto-select a location")
-                zone_info = None
+        st.sidebar.markdown("1. Click on the map below\n2. Click '📋 Copy Coordinates' button\n3. Paste into the text input below\n4. Click 'Load Weather Data'")
         
         # Read the HTML file
         try:
@@ -388,24 +350,30 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
             st.stop()
         
-        # JavaScript to capture clicks and update URL with coordinates
+        # JavaScript to capture clicks and show coordinates
         click_capture_script = """
         <script>
         (function() {
             let attempts = 0;
             const maxAttempts = 30;
+            let lastCoords = null;
             
-            function updateUrlWithCoords(lat, lng) {
-                // Update the URL with query params - this will trigger a page reload
-                try {
-                    const url = new URL(window.parent.location.href);
-                    url.searchParams.set('map_lat', lat);
-                    url.searchParams.set('map_lon', lng);
-                    window.parent.location.href = url.toString();
-                } catch(e) {
-                    // If we can't access parent, try to redirect
-                    window.location.href = window.location.href.split('?')[0] + '?map_lat=' + lat + '&map_lon=' + lng;
+            function updateStatus(lat, lng) {
+                const coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+                const status = document.getElementById('map_status');
+                if (status) {
+                    status.textContent = '📍 Selected: ' + coordStr;
+                    status.style.background = 'rgba(46, 204, 113, 0.9)';
+                    status.style.cursor = 'pointer';
                 }
+                // Store in a data attribute for the copy button
+                const mapContainer = document.getElementById('map');
+                if (mapContainer) {
+                    mapContainer.dataset.lat = lat;
+                    mapContainer.dataset.lon = lng;
+                    mapContainer.dataset.coords = coordStr;
+                }
+                lastCoords = coordStr;
             }
             
             function setupClickHandler() {
@@ -422,14 +390,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                                     const lat = parseFloat(match[1]);
                                     const lng = parseFloat(match[2]);
                                     if (!isNaN(lat) && !isNaN(lng)) {
-                                        // Update status
-                                        const status = document.getElementById('map_status');
-                                        if (status) {
-                                            status.textContent = '📍 Selected: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
-                                            status.style.background = 'rgba(46, 204, 113, 0.9)';
-                                        }
-                                        // Update URL and reload
-                                        updateUrlWithCoords(lat, lng);
+                                        updateStatus(lat, lng);
                                     }
                                 }
                             }
@@ -452,24 +413,6 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             
             // Start trying to set up the click handler
             setTimeout(trySetup, 1500);
-            
-            // Check if URL already has coordinates on load
-            function checkUrlParams() {
-                try {
-                    const url = new URL(window.parent.location.href);
-                    const lat = url.searchParams.get('map_lat');
-                    const lon = url.searchParams.get('map_lon');
-                    if (lat && lon) {
-                        const coordStr = parseFloat(lat).toFixed(6) + ', ' + parseFloat(lon).toFixed(6);
-                        const status = document.getElementById('map_status');
-                        if (status) {
-                            status.textContent = '📍 Selected: ' + coordStr;
-                            status.style.background = 'rgba(46, 204, 113, 0.9)';
-                        }
-                    }
-                } catch(e) {}
-            }
-            setTimeout(checkUrlParams, 1000);
         })();
         </script>
         """
@@ -478,7 +421,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         map_html_with_script = map_html.replace(
             '</body>',
             '''
-            <div id="map_status" style="position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:white; padding:8px 16px; border-radius:20px; font-size:13px; z-index:1000; pointer-events:none; transition: all 0.3s ease;">
+            <div id="map_status" style="position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:white; padding:8px 16px; border-radius:20px; font-size:13px; z-index:1000; pointer-events:none; transition: all 0.3s ease; max-width:80%; text-align:center;">
                 🖱️ Click on the map to select a location
             </div>
             ''' + click_capture_script + '''
@@ -489,10 +432,69 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         # Render the component
         components.html(map_html_with_script, height=620, scrolling=False)
         
-        # Show a message if no location is selected
-        if zone_info is None:
-            st.info("👆 Click anywhere on the map above to automatically select a location and load weather data.")
-            st.stop()
+        # Create columns for the copy button and text input
+        col1, col2, col3 = st.columns([2, 1, 2])
+        
+        with col2:
+            # Add a note about copying
+            st.markdown("""
+            <div style="text-align: center; padding: 10px; background: #f0f2f6; border-radius: 8px; margin: 10px 0;">
+                <p style="margin: 0; font-size: 14px;">📋 Click on the map above, then copy the coordinates that appear in the text box below.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Text input for coordinates
+        coord_input = st.text_input(
+            "📍 Coordinates:",
+            value=st.session_state.selected_coords,
+            placeholder="Click on the map, then paste coordinates here (e.g., 54.150, -4.480)",
+            key="coord_input",
+            help="Click on the map above to select a location, then paste the coordinates here"
+        )
+        
+        # Update session state when input changes
+        if coord_input != st.session_state.selected_coords:
+            st.session_state.selected_coords = coord_input
+        
+        # Load button
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            load_button = st.button("🌤️ Load Weather Data", type="primary", use_container_width=True)
+        
+        # Process the coordinates when button is clicked
+        if load_button and coord_input and coord_input.strip():
+            try:
+                lat_str, lon_str = coord_input.split(',')
+                lat = float(lat_str.strip())
+                lon = float(lon_str.strip())
+                
+                # Get elevation bonus
+                bonus, elevation = get_elevation_bonus(lat, lon)
+                zone_info = {
+                    "name": f"Selected Location ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": bonus
+                }
+                display_label = f"📍 {lat:.5f}, {lon:.5f}"
+                st.sidebar.success(f"✅ Location loaded!")
+                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+                
+                # Store in session state
+                st.session_state.current_zone_info = zone_info
+                st.session_state.current_display_label = display_label
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ Could not process coordinates: {e}")
+                zone_info = None
+        else:
+            # Check if we have a stored location
+            if st.session_state.current_zone_info is not None:
+                zone_info = st.session_state.current_zone_info
+                display_label = st.session_state.current_display_label
+                st.sidebar.info(f"📍 Using saved location: {display_label}")
+            else:
+                st.sidebar.info("👆 Click on the map, copy the coordinates, paste them above, then click 'Load Weather Data'")
+                zone_info = None
 
     elif location_mode == "📮 Postcode Zone":
         selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
@@ -530,7 +532,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         display_label = st.session_state.current_display_label
 
     if zone_info is None:
-        st.info("👈 Select a location by clicking on the map above, or choose a postcode to see live data.")
+        st.info("👈 Select a location by clicking on the map above, copying the coordinates, pasting them, and clicking 'Load Weather Data', or choose a postcode to see live data.")
         st.stop()
 
     # Display the weather data
