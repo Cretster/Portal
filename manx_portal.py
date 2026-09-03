@@ -47,12 +47,12 @@ def sample_ph(lat, lon, grid_meta):
 def ph_legend_html(ph_value=None):
     """Prominent legend + large pH readout for the selected point."""
     rows = [
-        ("#d73027", "< 5.0", "Strongly acid"),
+        ("#d73027", "< 5.0", "ACIEEEEED!!!"),
         ("#fc8d59", "5.0 – 5.5", "Moderately acid"),
-        ("#fee08b", "5.5 – 6.0", "Slightly acid"),
-        ("#d9ef8b", "6.0 – 6.5", "Near-neutral (focus range)"),
-        ("#91cf60", "6.5 – 7.0", "Slightly alkaline"),
-        ("#1a9850", "> 7.0", "Alkaline"),
+        ("#fee08b", "5.5 – 6.0", "Slightly acid (possibly optimal)"),
+        ("#d9ef8b", "6.0 – 6.5", "Near-neutral (possibly optimal)"),
+        ("#91cf60", "6.5 – 7.0", "Slightly alkaline (like Duracell)"),
+        ("#1a9850", "> 7.0", "Alkaline (like bleach)"),
     ]
     parts = [
         '<div style="font-size:14px;line-height:1.55;'
@@ -71,8 +71,8 @@ def ph_legend_html(ph_value=None):
         parts.append(
             '<div style="margin-top:14px;padding:12px 14px;background:#e8f4fc;'
             'border-left:5px solid #1a5276;border-radius:4px">'
-            '<div style="font-size:13px;color:#555;margin-bottom:2px">'
-            "Selected location</div>"
+            '<div style="font-size:16px;color:#555;margin-bottom:2px">'
+            "Chosen Location</div>"
             f'<div style="font-size:28px;font-weight:700;color:#1a5276;'
             f'letter-spacing:0.02em">pH ≈ {ph_value:.1f}</div>'
             "</div>"
@@ -394,8 +394,10 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 
 
 # --- FRONTEND ---
-st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's My Celium Portal")
+st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
+st.title("🍄 Dr Pablo's My Celium Magic!")
+st.heading("🍄 Click on the map where you want to check conditions")
+st.heading("🍄 Or use a postcode for checking a more general area")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
@@ -590,12 +592,12 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.caption(f"**Location:** {zone_info['name']}")
         st.markdown("---")
 
-    st.subheader(f"📈 Historical & Forecast Trend: {display_label}")
+    st.subheader(f"📈 Recent Weather & Forecast Trend: {display_label}")
     st.caption(
         "Use this to line up your own field observations against what the model expected at the time."
     )
 
-    history_days = st.slider("Days of history to include", 7, 30, 21)
+    history_days = st.slider("Days of Weather History to include", 7, 30, 21)
 
     try:
         with st.spinner("Loading trend data..."):
@@ -671,7 +673,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.markdown(f"### Status: {verdict}")
         st.markdown("---")
 
-        st.markdown("### Metric Breakdown Performance")
+        st.markdown("### Score Breakdown")
         c1, c2, c3 = st.columns(3)
         c1.markdown(f"**Day Temp:** {d_temp}°C")
         c2.markdown(f"⭐ {int((d_s / 35) * 10)}/10")
