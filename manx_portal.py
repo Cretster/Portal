@@ -397,7 +397,7 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
-#st.header("🍄 Or use a postcode for checking a more general area")
+st.subheader("🍄 (Then scroll for probability info below)")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
