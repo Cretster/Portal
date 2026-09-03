@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 import urllib.parse
 from datetime import datetime, timedelta
 import time
+import json
 
 # 1. Species Parameter Matrix (edible species only)
 SPECIES_MATRIX = {
@@ -304,6 +305,193 @@ def display_weather_data(zone_info, display_label, selected_species, rules):
             st.info(f"⛰️ **Upland Grazing Bonus:** +{zone_info['upland_offset'] * 5}% terrain advantage mapping applied to {zone_info['name']}.")
 
 
+# ==========================================
+# CUSTOM COMPONENT WITH AUTO-SUBMIT
+# ==========================================
+def render_ph_map_with_autoselect():
+    """
+    Renders the pH map with auto-selection using Streamlit's component API.
+    """
+    # Read the HTML file
+    try:
+        with open('WorkingPHmap.html', 'r') as f:
+            map_html = f.read()
+    except FileNotFoundError:
+        st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
+        return None
+    
+    # Create a unique ID for this component
+    component_id = f"ph_map_{int(time.time())}"
+    
+    # JavaScript with proper Streamlit component communication
+    js_code = f"""
+    <script>
+    (function() {{
+        // Store the component ID for sending messages
+        const componentId = '{component_id}';
+        let mapReady = false;
+        
+        // Function to send coordinates to Streamlit
+        function sendCoordinatesToStreamlit(lat, lng) {{
+            const coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+            console.log('Sending coordinates:', coordStr);
+            
+            // Method 1: Use Streamlit's setComponentValue
+            if (window.parent) {{
+                window.parent.postMessage({{
+                    type: 'streamlit:setComponentValue',
+                    value: coordStr
+                }}, '*');
+            }}
+            
+            // Method 2: Update the hidden input and trigger events
+            const hiddenInput = document.getElementById('ph_coords_hidden');
+            if (hiddenInput) {{
+                hiddenInput.value = coordStr;
+                hiddenInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                hiddenInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            
+            // Method 3: Find the Streamlit text input and update it
+            try {{
+                const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
+                inputs.forEach(function(input) {{
+                    if (input.id && input.id.includes('auto_coord_input')) {{
+                        input.value = coordStr;
+                        input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    }}
+                }});
+                
+                // Also try to click the load button
+                const buttons = window.parent.document.querySelectorAll('button');
+                buttons.forEach(function(button) {{
+                    if (button.textContent && button.textContent.includes('Load Weather')) {{
+                        setTimeout(function() {{ button.click(); }}, 300);
+                    }}
+                }});
+            }} catch(e) {{
+                console.log('Could not access parent DOM:', e);
+            }}
+            
+            // Update status display
+            const status = document.getElementById('map_status');
+            if (status) {{
+                status.textContent = '✅ Selected: ' + coordStr;
+                status.style.background = 'rgba(46, 204, 113, 0.9)';
+                status.style.color = 'white';
+            }}
+        }}
+        
+        // Set up click handler on the map
+        function setupMapClickHandler() {{
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {{
+                console.log('Map container not found, retrying...');
+                return false;
+            }}
+            
+            // Add click listener
+            mapContainer.addEventListener('click', function(e) {{
+                console.log('Map clicked, waiting for popup...');
+                // Wait for the popup to appear with coordinates
+                setTimeout(function() {{
+                    const popup = document.querySelector('.leaflet-popup-content');
+                    if (popup) {{
+                        const content = popup.textContent;
+                        const match = content.match(/(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)/);
+                        if (match) {{
+                            const lat = parseFloat(match[1]);
+                            const lng = parseFloat(match[2]);
+                            if (!isNaN(lat) && !isNaN(lng)) {{
+                                console.log('Coordinates captured:', lat, lng);
+                                sendCoordinatesToStreamlit(lat, lng);
+                            }}
+                        }}
+                    }} else {{
+                        console.log('Popup not found, trying again...');
+                        // Try one more time
+                        setTimeout(function() {{
+                            const popup2 = document.querySelector('.leaflet-popup-content');
+                            if (popup2) {{
+                                const content = popup2.textContent;
+                                const match = content.match(/(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)/);
+                                if (match) {{
+                                    const lat = parseFloat(match[1]);
+                                    const lng = parseFloat(match[2]);
+                                    if (!isNaN(lat) && !isNaN(lng)) {{
+                                        console.log('Coordinates captured (retry):', lat, lng);
+                                        sendCoordinatesToStreamlit(lat, lng);
+                                    }}
+                                }}
+                            }}
+                        }}, 500);
+                    }}
+                }}, 800);
+            }});
+            
+            console.log('Map click handler installed');
+            return true;
+        }}
+        
+        // Try to set up the handler with retries
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        function trySetup() {{
+            if (setupMapClickHandler()) {{
+                mapReady = true;
+                return;
+            }}
+            attempts++;
+            if (attempts < maxAttempts) {{
+                console.log('Retry attempt', attempts);
+                setTimeout(trySetup, 500);
+            }}
+        }}
+        
+        // Start trying
+        setTimeout(trySetup, 1000);
+        
+        // Also handle any existing URL params
+        function checkForExistingCoords() {{
+            try {{
+                const url = new URL(window.parent.location.href);
+                const lat = url.searchParams.get('lat');
+                const lon = url.searchParams.get('lon');
+                if (lat && lon) {{
+                    console.log('Found coords in URL:', lat, lon);
+                    sendCoordinatesToStreamlit(parseFloat(lat), parseFloat(lon));
+                }}
+            }} catch(e) {{}}
+        }}
+        setTimeout(checkForExistingCoords, 500);
+    }})();
+    </script>
+    """
+    
+    # Modify the HTML to include our JavaScript and a hidden input
+    # Insert our script and a hidden input before </body>
+    modified_html = map_html.replace(
+        '</body>',
+        '''
+        <!-- Hidden input for storing coordinates -->
+        <input type="hidden" id="ph_coords_hidden" value="" />
+        <div id="map_status" style="position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:white; padding:10px 20px; border-radius:25px; font-size:14px; z-index:1000; pointer-events:none; max-width:90%; text-align:center; transition:all 0.3s ease;">
+            🖱️ Tap the map to select a location
+        </div>
+        ''' + js_code + '''
+        </body>
+        '''
+    )
+    
+    # Render the component
+    components.html(modified_html, height=620, scrolling=False)
+    
+    # Return the component ID so we can read the value
+    return component_id
+
+
 # --- FRONTEND ---
 st.set_page_config(page_title="Manx Mushroom Portal", page_icon="🍄", layout="wide")
 st.title("🍄 Real-Time Isle of Man Mycological Observation Dashboard")
@@ -328,8 +516,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.session_state.current_zone_info = None
     if 'current_display_label' not in st.session_state:
         st.session_state.current_display_label = ""
-    if 'selected_coords' not in st.session_state:
-        st.session_state.selected_coords = ""
+    if 'auto_coords' not in st.session_state:
+        st.session_state.auto_coords = ""
     
     location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
     
@@ -339,132 +527,48 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     
     if location_mode == "🗺️ pH Map Click":
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🗺️ Click on the map to select a location")
-        st.sidebar.markdown("1. Click on the map below\n2. Click '📋 Copy Coordinates' button\n3. Paste into the text input below\n4. Click 'Load Weather Data'")
+        st.sidebar.markdown("### 🗺️ Tap the map to select a location")
+        st.sidebar.markdown("Simply tap anywhere on the map - the weather data will load automatically!")
         
-        # Read the HTML file
-        try:
-            with open('WorkingPHmap.html', 'r') as f:
-                map_html = f.read()
-        except FileNotFoundError:
-            st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
-            st.stop()
+        # Render the map with auto-select
+        component_id = render_ph_map_with_autoselect()
         
-        # JavaScript to capture clicks and show coordinates
-        click_capture_script = """
-        <script>
-        (function() {
-            let attempts = 0;
-            const maxAttempts = 30;
-            let lastCoords = null;
-            
-            function updateStatus(lat, lng) {
-                const coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
-                const status = document.getElementById('map_status');
-                if (status) {
-                    status.textContent = '📍 Selected: ' + coordStr;
-                    status.style.background = 'rgba(46, 204, 113, 0.9)';
-                    status.style.cursor = 'pointer';
-                }
-                // Store in a data attribute for the copy button
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.dataset.lat = lat;
-                    mapContainer.dataset.lon = lng;
-                    mapContainer.dataset.coords = coordStr;
-                }
-                lastCoords = coordStr;
-            }
-            
-            function setupClickHandler() {
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.addEventListener('click', function(e) {
-                        // Wait for popup to appear with coordinates
-                        setTimeout(function() {
-                            const popup = document.querySelector('.leaflet-popup-content');
-                            if (popup) {
-                                const content = popup.textContent;
-                                const match = content.match(/(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)/);
-                                if (match) {
-                                    const lat = parseFloat(match[1]);
-                                    const lng = parseFloat(match[2]);
-                                    if (!isNaN(lat) && !isNaN(lng)) {
-                                        updateStatus(lat, lng);
-                                    }
-                                }
-                            }
-                        }, 600);
-                    });
-                    return true;
-                }
-                return false;
-            }
-            
-            function trySetup() {
-                if (setupClickHandler()) {
-                    return;
-                }
-                attempts++;
-                if (attempts < maxAttempts) {
-                    setTimeout(trySetup, 500);
-                }
-            }
-            
-            // Start trying to set up the click handler
-            setTimeout(trySetup, 1500);
-        })();
-        </script>
-        """
-        
-        # Insert the script and status display before </body>
-        map_html_with_script = map_html.replace(
-            '</body>',
-            '''
-            <div id="map_status" style="position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:white; padding:8px 16px; border-radius:20px; font-size:13px; z-index:1000; pointer-events:none; transition: all 0.3s ease; max-width:80%; text-align:center;">
-                🖱️ Click on the map to select a location
-            </div>
-            ''' + click_capture_script + '''
-            </body>
-            '''
-        )
-        
-        # Render the component
-        components.html(map_html_with_script, height=620, scrolling=False)
-        
-        # Create columns for the copy button and text input
-        col1, col2, col3 = st.columns([2, 1, 2])
-        
-        with col2:
-            # Add a note about copying
-            st.markdown("""
-            <div style="text-align: center; padding: 10px; background: #f0f2f6; border-radius: 8px; margin: 10px 0;">
-                <p style="margin: 0; font-size: 14px;">📋 Click on the map above, then copy the coordinates that appear in the text box below.</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Text input for coordinates
+        # Use a text input that will be auto-updated by the component
+        # This is the key - the JavaScript will update this input
         coord_input = st.text_input(
-            "📍 Coordinates:",
-            value=st.session_state.selected_coords,
-            placeholder="Click on the map, then paste coordinates here (e.g., 54.150, -4.480)",
-            key="coord_input",
-            help="Click on the map above to select a location, then paste the coordinates here"
+            "📍 Selected Coordinates:",
+            value=st.session_state.auto_coords,
+            placeholder="Tap the map above to auto-select a location",
+            key="auto_coord_input",
+            help="Coordinates will auto-fill when you tap the map",
+            label_visibility="visible"
         )
         
-        # Update session state when input changes
-        if coord_input != st.session_state.selected_coords:
-            st.session_state.selected_coords = coord_input
+        # Update session state when the input changes
+        if coord_input != st.session_state.auto_coords:
+            st.session_state.auto_coords = coord_input
         
-        # Load button
+        # Add a manual load button as backup
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             load_button = st.button("🌤️ Load Weather Data", type="primary", use_container_width=True)
         
-        # Process the coordinates when button is clicked
+        # Process coordinates (auto or manual)
+        coords_to_process = None
+        
+        # Check if we have coordinates from the auto-input
+        if st.session_state.auto_coords and st.session_state.auto_coords.strip():
+            coords_to_process = st.session_state.auto_coords
+        
+        # Or from the load button
         if load_button and coord_input and coord_input.strip():
+            coords_to_process = coord_input
+            st.session_state.auto_coords = coord_input
+        
+        # Process the coordinates
+        if coords_to_process:
             try:
-                lat_str, lon_str = coord_input.split(',')
+                lat_str, lon_str = coords_to_process.split(',')
                 lat = float(lat_str.strip())
                 lon = float(lon_str.strip())
                 
@@ -493,7 +597,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 display_label = st.session_state.current_display_label
                 st.sidebar.info(f"📍 Using saved location: {display_label}")
             else:
-                st.sidebar.info("👆 Click on the map, copy the coordinates, paste them above, then click 'Load Weather Data'")
+                st.sidebar.info("👆 Tap the map above to auto-select a location")
                 zone_info = None
 
     elif location_mode == "📮 Postcode Zone":
@@ -532,7 +636,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         display_label = st.session_state.current_display_label
 
     if zone_info is None:
-        st.info("👈 Select a location by clicking on the map above, copying the coordinates, pasting them, and clicking 'Load Weather Data', or choose a postcode to see live data.")
+        st.info("👈 Tap the map above to auto-select a location, or choose a postcode to see live data.")
         st.stop()
 
     # Display the weather data
@@ -554,7 +658,7 @@ else:
             return {"label": outcode, **IOM_POSTCODE_DB[outcode]}
         elif mode == "🗺️ pH Map":
             coords = column.text_input("Coordinates from pH map:", placeholder="54.150, -4.480", key=f"zone{zone_num}_phmap", label_visibility="collapsed")
-            column.caption("Click the pH map in the main view to get coordinates, then paste here")
+            column.caption("Tap the pH map in the main view to get coordinates, then paste here")
             if coords:
                 try:
                     lat_str, lon_str = coords.split(',')
