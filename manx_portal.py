@@ -254,7 +254,7 @@ def render_location_map(lat, lon, label):
 
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
-st.title("🍄 Real-Time Isle of Man Mycological Observation Dashboard")
+st.title("🍄 Dr Pablo's My Celium Portal")
 
 st.sidebar.header("Target Organism Matrix")
 selected_species = st.sidebar.selectbox("Select Target Variety:", list(SPECIES_MATRIX.keys()))
