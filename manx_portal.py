@@ -336,18 +336,22 @@ def find_overlay_png():
 
 
 def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
-                           clicked=None, grid_meta=None):
+                           clicked=None, grid_meta=None, opacity=0.7,
+                           fit_island=False):
     """
     Folium map with custom-coloured SoilGrids pH image overlay.
     Falls back to ISRIC WMS if the PNG is missing.
     The red pin is always drawn from session state so it survives reruns.
+    When fit_island is True (first load only), the view is fitted to IoM bounds;
+    otherwise centre/zoom from the caller are respected so user zoom is kept.
     """
     m = folium.Map(
         location=[center_lat, center_lon],
-        zoom_start=zoom,
+        zoom_start=int(zoom),
         tiles="OpenStreetMap",
     )
-    m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
+    if fit_island:
+        m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
 
     png = find_overlay_png()
     if png and grid_meta:
@@ -358,7 +362,7 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
                 [grid_meta["south"], grid_meta["west"]],
                 [grid_meta["north"], grid_meta["east"]],
             ],
-            opacity=0.7,
+            opacity=float(opacity),
             interactive=False,
             cross_origin=False,
         ).add_to(m)
@@ -369,7 +373,7 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
             name="Soil pH 0–5 cm (SoilGrids WMS)",
             fmt="image/png",
             transparent=True,
-            opacity=0.65,
+            opacity=float(opacity),
             version="1.3.0",
             attr="SoilGrids / ISRIC (CC-BY 4.0)",
         ).add_to(m)
@@ -395,6 +399,11 @@ st.title("🍄 Dr Pablo's My Celium Portal")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
+if "map_view" not in st.session_state:
+    # centre + zoom remembered across clicks so the map does not jump
+    st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
+if "ph_opacity" not in st.session_state:
+    st.session_state.ph_opacity = 0.70
 
 ph_grid = load_ph_grid()
 
@@ -465,27 +474,50 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         )
         display_label = "Map pin"
 
-        center_lat, center_lon, zoom = 54.23, -4.55, 10
-        if st.session_state.map_click:
-            center_lat = st.session_state.map_click["lat"]
-            center_lon = st.session_state.map_click["lon"]
-            zoom = 12
-
-        fmap = build_clickable_ph_map(
-            center_lat, center_lon, zoom,
-            st.session_state.map_click, ph_grid,
+        # Opacity control for the soil-pH overlay
+        st.session_state.ph_opacity = st.slider(
+            "Soil pH overlay opacity",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(st.session_state.ph_opacity),
+            step=0.05,
+            key="ph_opacity_slider",
+            help="Drag to fade the pH colour layer in or out.",
         )
 
-        # Stable key so the component is not reset on every unrelated widget change
+        view = st.session_state.map_view
+        # Only fit to the whole island on the very first visit (no pin yet, default zoom)
+        fit_island = st.session_state.map_click is None and view["zoom"] <= 10
+
+        fmap = build_clickable_ph_map(
+            view["lat"], view["lon"], int(view["zoom"]),
+            st.session_state.map_click, ph_grid,
+            opacity=float(st.session_state.ph_opacity),
+            fit_island=fit_island,
+        )
+
+        # Stable key; request zoom + centre so we can preserve the user's view
         map_data = st_folium(
             fmap,
             width=None,
             height=520,
-            returned_objects=["last_clicked"],
+            returned_objects=["last_clicked", "zoom", "center"],
             key="iom_ph_map_stable",
         )
 
-        # Only update session state when the user actually clicked a new point
+        # Remember current zoom / centre whenever the user pans or zooms
+        if map_data:
+            if map_data.get("zoom") is not None:
+                st.session_state.map_view["zoom"] = int(map_data["zoom"])
+            if map_data.get("center"):
+                c = map_data["center"]
+                lat_c = c.get("lat")
+                lon_c = c.get("lng", c.get("lon"))
+                if lat_c is not None and lon_c is not None:
+                    st.session_state.map_view["lat"] = float(lat_c)
+                    st.session_state.map_view["lon"] = float(lon_c)
+
+        # Only update pin when the user actually clicked a new point
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
@@ -498,7 +530,10 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 or abs(prev["lon"] - lon) > 1e-6
             ):
                 st.session_state.map_click = new_click
-                st.rerun()  # rebuild map immediately with the new pin
+                # Keep current zoom; update centre to the pin without forcing a zoom reset
+                st.session_state.map_view["lat"] = lat
+                st.session_state.map_view["lon"] = lon
+                st.rerun()
 
         if st.session_state.map_click:
             lat = st.session_state.map_click["lat"]
