@@ -2,3 +2,5 @@ streamlit
 requests
 plotly
 pydeck
+folium
+streamlit-folium
