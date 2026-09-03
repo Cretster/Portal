@@ -3,15 +3,15 @@ import requests
 import re
 import plotly.graph_objects as go
 import pydeck as pdk
-import streamlit.components.v1 as components
-import urllib.parse
 from datetime import datetime, timedelta
+import folium
+from streamlit_folium import st_folium
 
 # 1. Species Parameter Matrix (edible species only)
 SPECIES_MATRIX = {
-    "🍄 Liberty Cap (Psilocybe semilanceata)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True},
-    "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
-    "🍄 Pearl Oyster (Pleurotus ostreatus)": {"day_min": 10, "day_max": 18, "night_min": 6, "night_max": 12, "rain_trigger": 15, "frost_kill": False}
+     "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True}
+#    "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
+#    "🍄 Pearl Oyster (Pleurotus ostreatus)": {"day_min": 10, "day_max": 18, "night_min": 6, "night_max": 12, "rain_trigger": 15, "frost_kill": False}
 }
 
 
@@ -29,7 +29,7 @@ IOM_POSTCODE_DB = {
 }
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=1800)  # cache each location's weather for 30 minutes
 def fetch_live_weather(lat, lon):
     """
     Pulls real day/night temps from the last 24h and rolling 48h rainfall
@@ -114,7 +114,6 @@ def score_color(score):
 def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
     fig = go.Figure()
 
-    # Temperature + rainfall lines (left axis for temp, right axis for rain)
     fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)",
                               line=dict(color="#e67e22", width=2)))
     fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)",
@@ -122,7 +121,6 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
     fig.add_trace(go.Scatter(x=dates, y=rain, mode="lines+markers", name="Daily Rainfall (mm)",
                               line=dict(color="#9b59b6", width=2), yaxis="y2"))
 
-    # Fruiting probability as a thick traffic-light coloured line
     first_seg = True
     for i in range(len(dates) - 1):
         seg_color = score_color((scores[i] + scores[i + 1]) / 2)
@@ -134,7 +132,6 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
             legendgroup="probability", hoverinfo="skip",
         ))
         first_seg = False
-    # Markers on top of the probability line
     fig.add_trace(go.Scatter(
         x=dates, y=scores, mode="markers", yaxis="y2",
         marker=dict(color=[score_color(s) for s in scores], size=9, line=dict(color="white", width=1)),
@@ -211,26 +208,207 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
     return total_score, verdict, day_score, night_score, rain_score
 
 
-def display_weather_data(zone_info, display_label, selected_species, rules):
-    """Display weather data, graph, and scorecard for a location."""
+def render_location_map(lat, lon, label):
+    """
+    Draws a map centred on the given point (kept for the comparison view).
+    """
+    highlight = pdk.Layer(
+        "ScatterplotLayer",
+        data=[{"lat": lat, "lon": lon, "label": label}],
+        get_position="[lon, lat]",
+        get_fill_color="[46, 204, 113, 90]",
+        get_radius=900,
+        pickable=False,
+    )
+    marker = pdk.Layer(
+        "ScatterplotLayer",
+        data=[{"lat": lat, "lon": lon, "label": label}],
+        get_position="[lon, lat]",
+        get_fill_color="[231, 76, 60, 255]",
+        get_radius=70,
+        pickable=True,
+    )
+    view_state = pdk.ViewState(latitude=lat, longitude=lon, zoom=11.5, pitch=0)
+    st.pydeck_chart(pdk.Deck(
+        layers=[highlight, marker],
+        initial_view_state=view_state,
+        tooltip={"text": "{label}"},
+        map_style=None,
+    ))
+
+
+def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10, clicked=None):
+    """
+    Folium map of the Isle of Man with SoilGrids pH WMS overlay.
+    Clicks are captured by streamlit-folium and returned as lat/lon.
+    """
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=zoom,
+        tiles="OpenStreetMap",
+        max_bounds=True,
+    )
+    # Limit pan roughly to the island
+    m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
+
+    # SoilGrids pH 0-5 cm mean (ISRIC WMS)
+    folium.raster_layers.WmsTileLayer(
+        url="https://maps.isric.org/mapserv?map=/map/phh2o.map",
+        layers="phh2o_0-5cm_mean",
+        name="Soil pH 0–5 cm (SoilGrids)",
+        fmt="image/png",
+        transparent=True,
+        opacity=0.65,
+        version="1.3.0",
+        attr="SoilGrids / ISRIC (CC-BY 4.0)",
+    ).add_to(m)
+
+    folium.LayerControl(collapsed=False).add_to(m)
+
+    # Show existing pin if we already have a click
+    if clicked and clicked.get("lat") is not None:
+        folium.Marker(
+            [clicked["lat"], clicked["lon"]],
+            popup=f"{clicked['lat']:.5f}, {clicked['lon']:.5f}",
+            icon=folium.Icon(color="red", icon="map-marker"),
+        ).add_to(m)
+
+    return m
+
+
+# --- FRONTEND ---
+st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
+st.title("🍄 Dr Pablo's My Celium Portal")
+
+# Persist map clicks across reruns
+if "map_click" not in st.session_state:
+    st.session_state.map_click = None  # {"lat": ..., "lon": ...}
+
+st.sidebar.header("Target Organism Matrix")
+selected_species = st.sidebar.selectbox("Select Target Variety:", list(SPECIES_MATRIX.keys()))
+rules = SPECIES_MATRIX[selected_species]
+
+st.sidebar.markdown("---")
+st.sidebar.header("Navigation Panel")
+app_mode = st.sidebar.radio("Go to view:", ["📍 Hyperlocal Focused Zone", "⚖️ 3-Zone Head-to-Head Compare"])
+
+# ==========================================
+# VIEW A: HYPERLOCAL FOCUSED ZONE VIEW
+# ==========================================
+if app_mode == "📍 Hyperlocal Focused Zone":
+    st.sidebar.markdown("---")
+    st.sidebar.header("Location Source")
+    location_mode = st.sidebar.radio(
+        "Specify location by:",
+        ["🗺️ Click on soil-pH map", "📮 Postcode Zone", "🔗 Google Maps Link / coords"],
+    )
+
+    zone_info = None
+    location_error = None
+    display_label = "Selected location"
+
+    if location_mode == "📮 Postcode Zone":
+        selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
+        zone_info = IOM_POSTCODE_DB[selected_outcode]
+        display_label = selected_outcode
+        # clear map pin when switching away from map mode
+        st.session_state.map_click = None
+
+    elif location_mode == "🔗 Google Maps Link / coords":
+        gmaps_input = st.sidebar.text_input(
+            "Paste a full Maps URL or coordinates:",
+            placeholder="54.150, -4.480  or  https://www.google.com/maps/@54.15,-4.48,15z",
+        )
+        st.sidebar.caption("Short maps.app.goo.gl links won't work directly — open once in a browser and paste the full URL, or paste coordinates from a long-press pin.")
+        display_label = "Pinned location"
+        st.session_state.map_click = None
+        if gmaps_input:
+            try:
+                lat, lon = google_maps_link_to_latlon(gmaps_input)
+                bonus, elevation = get_elevation_bonus(lat, lon)
+                zone_info = {"name": "Pinned Google Maps location", "lat": lat, "lon": lon, "upland_offset": bonus}
+                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+            except Exception as e:
+                location_error = str(e)
+
+    else:  # 🗺️ Click on soil-pH map
+        st.sidebar.info("Click anywhere on the map below to set the location. Weather & scores update automatically.")
+        display_label = "Map pin"
+
+        # Build map (centred on previous click if any)
+        center_lat, center_lon, zoom = 54.23, -4.55, 10
+        if st.session_state.map_click:
+            center_lat = st.session_state.map_click["lat"]
+            center_lon = st.session_state.map_click["lon"]
+            zoom = 12
+
+        fmap = build_clickable_ph_map(center_lat, center_lon, zoom, st.session_state.map_click)
+
+        # Capture clicks — returned as last_object_clicked / last_clicked
+        map_data = st_folium(
+            fmap,
+            width=None,
+            height=520,
+            returned_objects=["last_clicked"],
+            key="iom_ph_map",
+        )
+
+        if map_data and map_data.get("last_clicked"):
+            lat = map_data["last_clicked"]["lat"]
+            lon = map_data["last_clicked"]["lng"]
+            st.session_state.map_click = {"lat": lat, "lon": lon}
+
+        if st.session_state.map_click:
+            lat = st.session_state.map_click["lat"]
+            lon = st.session_state.map_click["lon"]
+            try:
+                bonus, elevation = get_elevation_bonus(lat, lon)
+                zone_info = {
+                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": bonus,
+                }
+                st.sidebar.success(f"📍 {lat:.5f}, {lon:.5f}")
+                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+            except Exception as e:
+                location_error = str(e)
+                zone_info = {
+                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": 0,
+                }
+
+    if location_error:
+        st.sidebar.error(f"⚠️ {location_error}")
+
     if zone_info is None:
-        return
-    
-    st.subheader(f"🗺️ {display_label}")
-    st.markdown(f"**Location:** {zone_info.get('name', display_label)}")
-    st.markdown(f"**Coordinates:** {zone_info['lat']:.5f}, {zone_info['lon']:.5f}")
-    st.markdown("---")
+        if location_mode == "🗺️ Click on soil-pH map":
+            st.info("👆 Click on the map above to choose a location. The soil-pH overlay is from SoilGrids (0–5 cm mean).")
+        else:
+            st.info("👈 Enter a location in the sidebar to see live data.")
+        st.stop()
+
+    # For postcode / Google modes still show a small location map (pydeck)
+    if location_mode != "🗺️ Click on soil-pH map":
+        st.subheader(f"🗺️ {display_label}")
+        render_location_map(zone_info["lat"], zone_info["lon"], zone_info.get("name", display_label))
+        st.markdown("---")
+    else:
+        st.subheader(f"🗺️ Map pin selected")
+        st.caption(f"**Location:** {zone_info['name']}")
+        st.markdown("---")
 
     st.subheader(f"📈 Historical & Forecast Trend: {display_label}")
     st.caption("Use this to line up your own field observations against what the model expected at the time.")
 
-    history_days = st.slider("Days of history to include", 7, 30, 21, key="history_days_slider")
+    history_days = st.slider("Days of history to include", 7, 30, 21)
 
     try:
         with st.spinner("Loading trend data..."):
             dates, day_max, night_min, trend_rain = fetch_historical_daily(zone_info["lat"], zone_info["lon"], days_back=history_days)
 
-        # Build a rolling 48h rain figure per day for scoring
         daily_scores = []
         for i in range(len(dates)):
             rain_48h = trend_rain[i] + (trend_rain[i - 1] if i > 0 else 0)
@@ -269,17 +447,17 @@ def display_weather_data(zone_info, display_label, selected_species, rules):
 
             st.markdown("---")
             st.caption("Override values manually if you want to test hypothetical conditions:")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5, key="day_temp_override")
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5, key="night_temp_override")
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, float(rain), 0.5, key="rain_override")
-            frost_input = st.toggle("Active Ground Frost Event?", value=frost_input, key="frost_override")
+            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5)
+            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5)
+            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, float(rain), 0.5)
+            frost_input = st.toggle("Active Ground Frost Event?", value=frost_input)
 
         except Exception as e:
             st.error(f"⚠️ Could not fetch live weather data ({e}). Falling back to manual input.")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, 12.0, 0.5, key="day_temp_manual")
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, 7.0, 0.5, key="night_temp_manual")
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, 15.0, 0.5, key="rain_manual")
-            frost_input = st.toggle("Active Ground Frost Event?", value=False, key="frost_manual")
+            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, 12.0, 0.5)
+            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, 7.0, 0.5)
+            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, 15.0, 0.5)
+            frost_input = st.toggle("Active Ground Frost Event?", value=False)
 
     with right_panel:
         st.subheader("🧬 Environmental Factor Scorecard")
@@ -302,217 +480,6 @@ def display_weather_data(zone_info, display_label, selected_species, rules):
         if zone_info["upland_offset"] > 0:
             st.info(f"⛰️ **Upland Grazing Bonus:** +{zone_info['upland_offset'] * 5}% terrain advantage mapping applied to {zone_info['name']}.")
 
-
-# --- FRONTEND ---
-st.set_page_config(page_title="Manx Mushroom Portal", page_icon="🍄", layout="wide")
-st.title("🍄 Real-Time Isle of Man Mycological Observation Dashboard")
-
-st.sidebar.header("Target Organism Matrix")
-selected_species = st.sidebar.selectbox("Select Target Variety:", list(SPECIES_MATRIX.keys()))
-rules = SPECIES_MATRIX[selected_species]
-
-st.sidebar.markdown("---")
-st.sidebar.header("Navigation Panel")
-app_mode = st.sidebar.radio("Go to view:", ["📍 Hyperlocal Focused Zone", "⚖️ 3-Zone Head-to-Head Compare"])
-
-# ==========================================
-# VIEW A: HYPERLOCAL FOCUSED ZONE VIEW
-# ==========================================
-if app_mode == "📍 Hyperlocal Focused Zone":
-    st.sidebar.markdown("---")
-    st.sidebar.header("Location Source")
-    
-    # Initialize session state for location persistence
-    if 'current_zone_info' not in st.session_state:
-        st.session_state.current_zone_info = None
-    if 'current_display_label' not in st.session_state:
-        st.session_state.current_display_label = ""
-    
-    location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
-    
-    zone_info = None
-    location_error = None
-    display_label = ""
-    
-    if location_mode == "🗺️ pH Map Click":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🗺️ Tap the map to select a location")
-        st.sidebar.markdown("Tap anywhere on the map - the page will reload with your selection!")
-        
-        # Check for coordinates from URL params
-        lat_param = st.query_params.get('lat')
-        lon_param = st.query_params.get('lon')
-        
-        if lat_param is not None and lon_param is not None:
-            try:
-                lat = float(lat_param)
-                lon = float(lon_param)
-                
-                # Get elevation bonus
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {
-                    "name": f"Selected Location ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus
-                }
-                display_label = f"📍 {lat:.5f}, {lon:.5f}"
-                st.sidebar.success(f"✅ Location loaded from map!")
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-                
-                # Store in session state
-                st.session_state.current_zone_info = zone_info
-                st.session_state.current_display_label = display_label
-                
-                # Clear URL params after processing
-                st.query_params.clear()
-            except Exception as e:
-                st.sidebar.warning(f"⚠️ Could not process location: {e}")
-                zone_info = None
-        else:
-            # Check if we have a stored location
-            if st.session_state.current_zone_info is not None:
-                zone_info = st.session_state.current_zone_info
-                display_label = st.session_state.current_display_label
-                st.sidebar.info(f"📍 Using saved location: {display_label}")
-            else:
-                st.sidebar.info("👆 Tap the map above to auto-select a location")
-                zone_info = None
-        
-        # Read the HTML file
-        try:
-            with open('WorkingPHmap.html', 'r') as f:
-                map_html = f.read()
-        except FileNotFoundError:
-            st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
-            st.stop()
-        
-        # Create the map with click-to-reload functionality
-        click_script = """
-        <script>
-        (function() {
-            let attempts = 0;
-            const maxAttempts = 30;
-            
-            function reloadWithCoords(lat, lng) {
-                // Reload the page with coordinates in the URL
-                const currentUrl = new URL(window.parent.location.href);
-                currentUrl.searchParams.set('lat', lat);
-                currentUrl.searchParams.set('lon', lng);
-                window.parent.location.href = currentUrl.toString();
-            }
-            
-            function setupClickHandler() {
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.addEventListener('click', function(e) {
-                        // Wait for popup to appear with coordinates
-                        setTimeout(function() {
-                            const popup = document.querySelector('.leaflet-popup-content');
-                            if (popup) {
-                                const content = popup.textContent;
-                                const match = content.match(/(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)/);
-                                if (match) {
-                                    const lat = parseFloat(match[1]);
-                                    const lng = parseFloat(match[2]);
-                                    if (!isNaN(lat) && !isNaN(lng)) {
-                                        // Update status
-                                        const status = document.getElementById('map_status');
-                                        if (status) {
-                                            status.textContent = '📍 Loading: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
-                                            status.style.background = 'rgba(52, 152, 219, 0.9)';
-                                        }
-                                        // Reload with coordinates
-                                        reloadWithCoords(lat, lng);
-                                    }
-                                }
-                            }
-                        }, 600);
-                    });
-                    return true;
-                }
-                return false;
-            }
-            
-            function trySetup() {
-                if (setupClickHandler()) {
-                    return;
-                }
-                attempts++;
-                if (attempts < maxAttempts) {
-                    setTimeout(trySetup, 500);
-                }
-            }
-            
-            setTimeout(trySetup, 1500);
-        })();
-        </script>
-        """
-        
-        # Modify the HTML
-        map_html_with_script = map_html.replace(
-            '</body>',
-            '''
-            <div id="map_status" style="position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:white; padding:10px 20px; border-radius:25px; font-size:14px; z-index:1000; pointer-events:none; max-width:90%; text-align:center; transition:all 0.3s ease;">
-                🖱️ Tap the map to select a location
-            </div>
-            ''' + click_script + '''
-            </body>
-            '''
-        )
-        
-        # Render the component
-        components.html(map_html_with_script, height=620, scrolling=False)
-        
-        # Show current status
-        if zone_info is None:
-            st.info("👆 Tap anywhere on the map above to select a location - the page will reload with your selection.")
-        else:
-            st.success(f"✅ Location selected: {display_label}")
-            st.markdown("---")
-
-    elif location_mode == "📮 Postcode Zone":
-        selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
-        zone_info = IOM_POSTCODE_DB[selected_outcode]
-        display_label = selected_outcode
-        # Store in session state
-        st.session_state.current_zone_info = zone_info
-        st.session_state.current_display_label = display_label
-
-    else:  # Google Maps Link
-        gmaps_input = st.sidebar.text_input(
-            "Paste a full Maps URL or coordinates:",
-            placeholder="54.150, -4.480  or  https://www.google.com/maps/@54.15,-4.48,15z",
-        )
-        st.sidebar.caption("Short maps.app.goo.gl links won't work directly — open once in a browser and paste the full URL, or paste coordinates from a long-press pin.")
-        display_label = "Pinned location"
-        if gmaps_input:
-            try:
-                lat, lon = google_maps_link_to_latlon(gmaps_input)
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {"name": "Pinned Google Maps location", "lat": lat, "lon": lon, "upland_offset": bonus}
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-                # Store in session state
-                st.session_state.current_zone_info = zone_info
-                st.session_state.current_display_label = display_label
-            except Exception as e:
-                location_error = str(e)
-
-    if location_error:
-        st.sidebar.error(f"⚠️ {location_error}")
-
-    # If we still don't have zone_info, check session state
-    if zone_info is None and st.session_state.current_zone_info is not None:
-        zone_info = st.session_state.current_zone_info
-        display_label = st.session_state.current_display_label
-
-    if zone_info is None:
-        st.info("👈 Tap the map above to select a location, or choose a postcode to see live data.")
-        st.stop()
-
-    # Display the weather data
-    display_weather_data(zone_info, display_label, selected_species, rules)
-
 # ==========================================
 # VIEW B: 3-ZONE HEAD-TO-HEAD COMPARISON
 # ==========================================
@@ -522,29 +489,11 @@ else:
 
     def render_zone_picker(column, zone_num, default_postcode_index):
         column.markdown(f"**Zone {zone_num}**")
-        mode = column.radio("Source:", ["📮 Postcode", "🗺️ pH Map", "🔗 Maps/Coords"], key=f"zone{zone_num}_mode", label_visibility="collapsed")
-        
+        mode = column.radio("Source:", ["📮 Postcode", "🔗 Maps/Coords"], key=f"zone{zone_num}_mode", label_visibility="collapsed")
         if mode == "📮 Postcode":
             outcode = column.selectbox("Postcode:", list(IOM_POSTCODE_DB.keys()), index=default_postcode_index, key=f"zone{zone_num}_postcode", label_visibility="collapsed")
             return {"label": outcode, **IOM_POSTCODE_DB[outcode]}
-        elif mode == "🗺️ pH Map":
-            coords = column.text_input("Coordinates from pH map:", placeholder="54.150, -4.480", key=f"zone{zone_num}_phmap", label_visibility="collapsed")
-            column.caption("Tap the pH map in the main view to get coordinates, then paste here")
-            if coords:
-                try:
-                    lat_str, lon_str = coords.split(',')
-                    lat = float(lat_str.strip())
-                    lon = float(lon_str.strip())
-                    bonus, elevation = get_elevation_bonus(lat, lon)
-                    column.caption(f"📐 ~{elevation}m (bonus +{bonus})")
-                    return {"label": f"pH Map ({lat:.4f}, {lon:.4f})", "name": "pH Map location", "lat": lat, "lon": lon, "upland_offset": bonus}
-                except:
-                    column.error("⚠️ Invalid coordinates format. Use: latitude, longitude")
-                    return None
-            else:
-                column.info("Enter coordinates from pH map")
-                return None
-        else:  # Maps/Coords
+        else:
             raw = column.text_input("Location:", placeholder="54.150, -4.480 or Maps URL", key=f"zone{zone_num}_custom", label_visibility="collapsed")
             if not raw:
                 return None
