@@ -223,40 +223,10 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
     return total_score, verdict, day_score, night_score, rain_score
 
 
-def render_location_map(lat, lon, label):
-    """
-    Draws a map centred on the given point, with a soft highlighted circle
-    around it (approximating the postcode/pinned zone) plus a solid marker
-    at the exact coordinates.
-    """
-    highlight = pdk.Layer(
-        "ScatterplotLayer",
-        data=[{"lat": lat, "lon": lon, "label": label}],
-        get_position="[lon, lat]",
-        get_fill_color="[46, 204, 113, 90]",
-        get_radius=900,
-        pickable=False,
-    )
-    marker = pdk.Layer(
-        "ScatterplotLayer",
-        data=[{"lat": lat, "lon": lon, "label": label}],
-        get_position="[lon, lat]",
-        get_fill_color="[231, 76, 60, 255]",
-        get_radius=70,
-        pickable=True,
-    )
-    view_state = pdk.ViewState(latitude=lat, longitude=lon, zoom=11.5, pitch=0)
-    st.pydeck_chart(pdk.Deck(
-        layers=[highlight, marker],
-        initial_view_state=view_state,
-        tooltip={"text": "{label}"},
-        map_style=None,
-    ))
-
 def ph_map_selector():
     """
-    Renders the pH map and returns coordinates when a location is clicked.
-    Uses a simple iframe approach to avoid string interpolation issues.
+    Renders the pH map and automatically selects the location when clicked.
+    Returns coordinates and triggers the app to update.
     """
     # Use session state to store coordinates
     if 'ph_map_coords' not in st.session_state:
@@ -270,8 +240,7 @@ def ph_map_selector():
         st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
         return ""
     
-    # Add JavaScript to the map to capture clicks
-    # We inject this right before the closing </body> tag
+    # Add JavaScript to the map to capture clicks and auto-submit
     click_capture_script = """
     <script>
     // Add click handler to send coordinates to parent
@@ -301,6 +270,13 @@ def ph_map_selector():
                                         window.parent.postMessage({
                                             type: 'streamlit:setComponentValue',
                                             value: coordStr
+                                        }, '*');
+                                        // Also send a specific location selected event
+                                        window.parent.postMessage({
+                                            type: 'locationSelected',
+                                            lat: lat,
+                                            lng: lng,
+                                            coordStr: coordStr
                                         }, '*');
                                     }
                                 }
@@ -379,13 +355,20 @@ def ph_map_selector():
                     const coordStr = event.data.value;
                     // Update status
                     document.getElementById('status').textContent = '📍 ' + coordStr;
-                    // Try to update the Streamlit input
+                    // Update the Streamlit input
                     try {{
                         const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
                         inputs.forEach(function(input) {{
                             if (input.id && input.id.includes('ph_map_coord_input')) {{
                                 input.value = coordStr;
                                 input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            }}
+                        }});
+                        // Also try to find and click any "Use Location" button
+                        const buttons = window.parent.document.querySelectorAll('button');
+                        buttons.forEach(function(button) {{
+                            if (button.textContent && button.textContent.includes('Use Selected Location')) {{
+                                button.click();
                             }}
                         }});
                     }} catch(e) {{
@@ -401,26 +384,22 @@ def ph_map_selector():
     # Render the component
     components.html(wrapper_html, height=620, scrolling=False)
     
-    # Text input for coordinates (manual entry or auto-filled from map)
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        coord_input = st.text_input(
-            "📍 Selected Coordinates:",
-            value=st.session_state.ph_map_coords,
-            placeholder="Click on the map above or paste coordinates (e.g., 54.150, -4.480)",
-            key="ph_map_coord_input",
-            help="Click on the pH map above to auto-fill coordinates, or type them manually"
-        )
-    with col2:
-        st.write("")
-        if st.button("📍 Use Map Selection", help="Re-focus on the map to select a location"):
-            pass  # Just a visual button, the map handles selection
+    # Create the text input (now hidden since it auto-updates)
+    coord_input = st.text_input(
+        "📍 Selected Coordinates:",
+        value=st.session_state.ph_map_coords,
+        placeholder="Click on the map above to select a location",
+        key="ph_map_coord_input",
+        help="Click on the pH map above to auto-fill coordinates",
+        label_visibility="collapsed"
+    )
     
     # Update session state
     if coord_input != st.session_state.ph_map_coords:
         st.session_state.ph_map_coords = coord_input
     
     return coord_input
+
 
 # --- FRONTEND ---
 st.set_page_config(page_title="Manx Mushroom Portal", page_icon="🍄", layout="wide")
@@ -440,23 +419,23 @@ app_mode = st.sidebar.radio("Go to view:", ["📍 Hyperlocal Focused Zone", "⚖
 if app_mode == "📍 Hyperlocal Focused Zone":
     st.sidebar.markdown("---")
     st.sidebar.header("Location Source")
-    location_mode = st.sidebar.radio("Specify location by:", ["📮 Postcode Zone", "🗺️ pH Map Click", "🔗 Google Maps Link"])
+    location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
     zone_info = None
     location_error = None
+    display_label = ""
 
-    if location_mode == "📮 Postcode Zone":
-        selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
-        zone_info = IOM_POSTCODE_DB[selected_outcode]
-        display_label = selected_outcode
-
-    elif location_mode == "🗺️ pH Map Click":
+    if location_mode == "🗺️ pH Map Click":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🗺️ Click on the map to select a location")
-        st.sidebar.markdown("The map shows soil pH data - click anywhere on land to select that location.")
+        st.sidebar.markdown("The map shows soil pH data - click anywhere on land to automatically select that location and load weather data.")
+        
+        # Create a placeholder for the coordinates
+        coord_placeholder = st.empty()
         
         # Display the map and get coordinates
         map_coords = ph_map_selector()
         
+        # Auto-trigger location selection when coordinates are available
         if map_coords and map_coords.strip():
             try:
                 # Parse the coordinates
@@ -473,14 +452,23 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                     "upland_offset": bonus
                 }
                 display_label = f"📍 {lat:.5f}, {lon:.5f}"
-                st.sidebar.success(f"✅ Selected: {display_label}")
+                st.sidebar.success(f"✅ Location selected automatically!")
                 st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+                
+                # Force a rerun to update the main display with the new location
+                st.rerun()
+                
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Could not parse coordinates: {e}")
                 zone_info = None
         else:
-            st.sidebar.info("👆 Click on the map above to select a location")
+            st.sidebar.info("👆 Click on the map above to automatically select a location")
             zone_info = None
+
+    elif location_mode == "📮 Postcode Zone":
+        selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
+        zone_info = IOM_POSTCODE_DB[selected_outcode]
+        display_label = selected_outcode
 
     else:  # Google Maps Link
         gmaps_input = st.sidebar.text_input(
@@ -502,11 +490,16 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.sidebar.error(f"⚠️ {location_error}")
 
     if zone_info is None:
-        st.info("👈 Enter a location in the sidebar to see live data.")
+        st.info("👈 Select a location using the map above or choose a postcode to see live data.")
+        # Show the map even when no location is selected
+        st.markdown("### 🗺️ Click the map below to select your location")
+        # Display a smaller version of the map as a fallback
+        ph_map_selector()
         st.stop()
 
     st.subheader(f"🗺️ {display_label}")
-    render_location_map(zone_info["lat"], zone_info["lon"], zone_info.get("name", display_label))
+    st.markdown(f"**Location:** {zone_info.get('name', display_label)}")
+    st.markdown(f"**Coordinates:** {zone_info['lat']:.5f}, {zone_info['lon']:.5f}")
     st.markdown("---")
 
     st.subheader(f"📈 Historical & Forecast Trend: {display_label}")
