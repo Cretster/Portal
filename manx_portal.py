@@ -253,7 +253,7 @@ def render_location_map(lat, lon, label):
 
 
 # --- FRONTEND ---
-st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
+st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", width="stretch")
 st.title("🍄 Dr Pablo's My Celium Portal")
 
 st.sidebar.header("Target Organism Matrix")
