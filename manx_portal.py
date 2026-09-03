@@ -8,7 +8,6 @@ import urllib.parse
 from datetime import datetime, timedelta
 
 # 1. Species Parameter Matrix (edible species only)
-# 1. Species Parameter Matrix (Including restored wild and edible target variants)
 SPECIES_MATRIX = {
     "🍄 Liberty Cap (Psilocybe semilanceata)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True},
     "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
@@ -30,7 +29,7 @@ IOM_POSTCODE_DB = {
 }
 
 
-@st.cache_data(ttl=1800)  # cache each location's weather for 30 minutes
+@st.cache_data(ttl=1800)
 def fetch_live_weather(lat, lon):
     """
     Pulls real day/night temps from the last 24h and rolling 48h rainfall
@@ -123,8 +122,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
     fig.add_trace(go.Scatter(x=dates, y=rain, mode="lines+markers", name="Daily Rainfall (mm)",
                               line=dict(color="#9b59b6", width=2), yaxis="y2"))
 
-    # Fruiting probability as a thick traffic-light coloured line, drawn as
-    # one short coloured segment per day so colour changes along its length.
+    # Fruiting probability as a thick traffic-light coloured line
     first_seg = True
     for i in range(len(dates) - 1):
         seg_color = score_color((scores[i] + scores[i + 1]) / 2)
@@ -136,7 +134,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
             legendgroup="probability", hoverinfo="skip",
         ))
         first_seg = False
-    # Markers on top of the probability line, individually coloured, with hover text
+    # Markers on top of the probability line
     fig.add_trace(go.Scatter(
         x=dates, y=scores, mode="markers", yaxis="y2",
         marker=dict(color=[score_color(s) for s in scores], size=9, line=dict(color="white", width=1)),
@@ -159,16 +157,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
 def google_maps_link_to_latlon(url):
     """
     Extracts lat/lon from a Google Maps link, or from raw "lat, lon"
-    coordinate text pasted directly (the most reliable option, e.g. from
-    a long-press pin in the Maps app). Handles full links with an
-    @lat,lon in the URL, place-pin links with !3d/!4d coordinates, and
-    plain ?q=lat,lon links.
-
-    Shortened goo.gl/maps.app.goo.gl links are deliberately hard to read
-    programmatically — Google serves bots a page with no coordinates in
-    it to force the redirect through their app/JS — so those aren't
-    reliably supported here; the UI points users to a full URL or raw
-    coordinates instead.
+    coordinate text pasted directly.
     """
     raw_coords = re.match(r"^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$", url)
     if raw_coords:
@@ -189,12 +178,11 @@ def google_maps_link_to_latlon(url):
     raise ValueError("Couldn't find coordinates in that link. Try pasting raw coordinates instead (e.g. 54.150, -4.480).")
 
 
-@st.cache_data(ttl=86400)  # elevation doesn't change, cache for a day
+@st.cache_data(ttl=86400)
 def get_elevation_bonus(lat, lon):
     """
     Approximates the same 0-4 'upland grazing bonus' scale used for the
-    postcode zones, but from real elevation data, for custom pinned
-    locations that aren't in the postcode database.
+    postcode zones, but from real elevation data.
     """
     resp = requests.get("https://api.open-meteo.com/v1/elevation", params={"latitude": lat, "longitude": lon}, timeout=10)
     resp.raise_for_status()
@@ -270,13 +258,6 @@ def ph_map_selector():
                                         window.parent.postMessage({
                                             type: 'streamlit:setComponentValue',
                                             value: coordStr
-                                        }, '*');
-                                        // Also send a specific location selected event
-                                        window.parent.postMessage({
-                                            type: 'locationSelected',
-                                            lat: lat,
-                                            lng: lng,
-                                            coordStr: coordStr
                                         }, '*');
                                     }
                                 }
@@ -364,13 +345,6 @@ def ph_map_selector():
                                 input.dispatchEvent(new Event('input', {{ bubbles: true }}));
                             }}
                         }});
-                        // Also try to find and click any "Use Location" button
-                        const buttons = window.parent.document.querySelectorAll('button');
-                        buttons.forEach(function(button) {{
-                            if (button.textContent && button.textContent.includes('Use Selected Location')) {{
-                                button.click();
-                            }}
-                        }});
                     }} catch(e) {{
                         // Cross-origin issues, ignore
                     }}
@@ -384,12 +358,12 @@ def ph_map_selector():
     # Render the component
     components.html(wrapper_html, height=620, scrolling=False)
     
-    # Create a hidden text input to store the coordinates (no duplicate key issue)
+    # Create a text input to store the coordinates
     coord_input = st.text_input(
         "📍 Selected Coordinates:",
         value=st.session_state.ph_map_coords,
         placeholder="Click on the map above to select a location",
-        key="ph_map_coord_input_unique",
+        key="ph_map_coord_input",
         help="Click on the pH map above to auto-fill coordinates",
         label_visibility="collapsed"
     )
@@ -420,6 +394,13 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     st.sidebar.markdown("---")
     st.sidebar.header("Location Source")
     location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
+    
+    # Initialize zone_info from session state if available
+    if 'zone_info' not in st.session_state:
+        st.session_state.zone_info = None
+    if 'display_label' not in st.session_state:
+        st.session_state.display_label = ""
+    
     zone_info = None
     location_error = None
     display_label = ""
@@ -449,23 +430,34 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                     "upland_offset": bonus
                 }
                 display_label = f"📍 {lat:.5f}, {lon:.5f}"
+                
+                # Store in session state for persistence
+                st.session_state.zone_info = zone_info
+                st.session_state.display_label = display_label
+                
                 st.sidebar.success(f"✅ Location selected automatically!")
                 st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-                
-                # Force a rerun to update the main display with the new location
-                st.rerun()
                 
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Could not parse coordinates: {e}")
                 zone_info = None
         else:
-            st.sidebar.info("👆 Click on the map above to automatically select a location")
-            zone_info = None
+            # Check if we have a previously stored location
+            if st.session_state.zone_info is not None:
+                zone_info = st.session_state.zone_info
+                display_label = st.session_state.display_label
+                st.sidebar.info(f"📍 Using previously selected location: {display_label}")
+            else:
+                st.sidebar.info("👆 Click on the map above to automatically select a location")
+                zone_info = None
 
     elif location_mode == "📮 Postcode Zone":
         selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
         zone_info = IOM_POSTCODE_DB[selected_outcode]
         display_label = selected_outcode
+        # Store in session state
+        st.session_state.zone_info = zone_info
+        st.session_state.display_label = display_label
 
     else:  # Google Maps Link
         gmaps_input = st.sidebar.text_input(
@@ -480,11 +472,19 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 bonus, elevation = get_elevation_bonus(lat, lon)
                 zone_info = {"name": "Pinned Google Maps location", "lat": lat, "lon": lon, "upland_offset": bonus}
                 st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+                # Store in session state
+                st.session_state.zone_info = zone_info
+                st.session_state.display_label = display_label
             except Exception as e:
                 location_error = str(e)
 
     if location_error:
         st.sidebar.error(f"⚠️ {location_error}")
+
+    # If no zone_info but we have it in session state, use it
+    if zone_info is None and st.session_state.zone_info is not None:
+        zone_info = st.session_state.zone_info
+        display_label = st.session_state.display_label
 
     if zone_info is None:
         st.info("👈 Select a location using the map above or choose a postcode to see live data.")
@@ -504,8 +504,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         with st.spinner("Loading trend data..."):
             dates, day_max, night_min, trend_rain = fetch_historical_daily(zone_info["lat"], zone_info["lon"], days_back=history_days)
 
-        # Build a rolling 48h rain figure per day for scoring, and compute the
-        # daily probability score using the same model as the scorecard below.
+        # Build a rolling 48h rain figure per day for scoring
         daily_scores = []
         for i in range(len(dates)):
             rain_48h = trend_rain[i] + (trend_rain[i - 1] if i > 0 else 0)
