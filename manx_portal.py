@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 # 1. Species Parameter Matrix (edible species only)
 # 1. Species Parameter Matrix (Including restored wild and edible target variants)
 SPECIES_MATRIX = {
-    "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
-    "🍄 Pearl Oyster (Pleurotus ostreatus)": {"day_min": 10, "day_max": 18, "night_min": 6, "night_max": 12, "rain_trigger": 15, "frost_kill": False},
-    "🍄 Liberty Cap (Psilocybe semilanceata)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True}
+     "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True}
+#    "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
+#    "🍄 Pearl Oyster (Pleurotus ostreatus)": {"day_min": 10, "day_max": 18, "night_min": 6, "night_max": 12, "rain_trigger": 15, "frost_kill": False}
 }
 
 
@@ -253,7 +253,7 @@ def render_location_map(lat, lon, label):
 
 
 # --- FRONTEND ---
-st.set_page_config(page_title="Manx Mushroom Portal", page_icon="🍄", layout="wide")
+st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
 st.title("🍄 Real-Time Isle of Man Mycological Observation Dashboard")
 
 st.sidebar.header("Target Organism Matrix")
