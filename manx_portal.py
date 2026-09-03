@@ -213,8 +213,7 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
 
 def ph_map_selector():
     """
-    Renders the pH map and automatically selects the location when clicked.
-    Returns coordinates and triggers the app to update.
+    Renders the pH map and stores coordinates in session state when clicked.
     """
     # Use session state to store coordinates
     if 'ph_map_coords' not in st.session_state:
@@ -228,7 +227,7 @@ def ph_map_selector():
         st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
         return ""
     
-    # Add JavaScript to the map to capture clicks and auto-submit
+    # Add JavaScript to the map to capture clicks
     click_capture_script = """
     <script>
     // Add click handler to send coordinates to parent
@@ -253,7 +252,7 @@ def ph_map_selector():
                                 const lng = parseFloat(match[2]);
                                 if (!isNaN(lat) && !isNaN(lng)) {
                                     const coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
-                                    // Send to parent (Streamlit)
+                                    // Send to parent (Streamlit) - use the streamlit:setComponentValue message
                                     if (window.parent) {
                                         window.parent.postMessage({
                                             type: 'streamlit:setComponentValue',
@@ -330,23 +329,18 @@ def ph_map_selector():
             <div id="status">🖱️ Click anywhere on land to select location</div>
         </div>
         <script>
-            // Listen for messages from the iframe
+            // Listen for messages from the iframe and forward to Streamlit
             window.addEventListener('message', function(event) {{
                 if (event.data && event.data.type === 'streamlit:setComponentValue') {{
                     const coordStr = event.data.value;
                     // Update status
                     document.getElementById('status').textContent = '📍 ' + coordStr;
-                    // Update the Streamlit input
-                    try {{
-                        const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
-                        inputs.forEach(function(input) {{
-                            if (input.id && input.id.includes('ph_map_coord_input')) {{
-                                input.value = coordStr;
-                                input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                            }}
-                        }});
-                    }} catch(e) {{
-                        // Cross-origin issues, ignore
+                    // Forward to Streamlit's component system
+                    if (window.parent) {{
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: coordStr
+                        }}, '*');
                     }}
                 }}
             }});
@@ -355,10 +349,13 @@ def ph_map_selector():
     </html>
     """
     
-    # Render the component
-    components.html(wrapper_html, height=620, scrolling=False)
+    # Render the component - this will automatically update when the iframe sends a message
+    coord_value = components.html(wrapper_html, height=620, scrolling=False)
     
-    # Create a text input to store the coordinates
+    # We can't directly get the value from components.html, so we use the text_input approach
+    # but with a unique key that gets updated by the JavaScript
+    
+    # Create a text input that will be updated by the JavaScript
     coord_input = st.text_input(
         "📍 Selected Coordinates:",
         value=st.session_state.ph_map_coords,
@@ -368,7 +365,7 @@ def ph_map_selector():
         label_visibility="collapsed"
     )
     
-    # Update session state
+    # Update session state when the input changes
     if coord_input != st.session_state.ph_map_coords:
         st.session_state.ph_map_coords = coord_input
     
@@ -395,12 +392,6 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     st.sidebar.header("Location Source")
     location_mode = st.sidebar.radio("Specify location by:", ["🗺️ pH Map Click", "📮 Postcode Zone", "🔗 Google Maps Link"])
     
-    # Initialize zone_info from session state if available
-    if 'zone_info' not in st.session_state:
-        st.session_state.zone_info = None
-    if 'display_label' not in st.session_state:
-        st.session_state.display_label = ""
-    
     zone_info = None
     location_error = None
     display_label = ""
@@ -413,8 +404,13 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         # Display the map and get coordinates
         map_coords = ph_map_selector()
         
-        # Auto-trigger location selection when coordinates are available
-        if map_coords and map_coords.strip():
+        # Create a "Use Location" button that triggers the update
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            use_location = st.button("📍 Use Selected Location", type="primary", use_container_width=True)
+        
+        # Auto-trigger location selection when coordinates are available and button is clicked
+        if use_location and map_coords and map_coords.strip():
             try:
                 # Parse the coordinates
                 lat_str, lon_str = map_coords.split(',')
@@ -430,25 +426,23 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                     "upland_offset": bonus
                 }
                 display_label = f"📍 {lat:.5f}, {lon:.5f}"
-                
-                # Store in session state for persistence
-                st.session_state.zone_info = zone_info
-                st.session_state.display_label = display_label
-                
-                st.sidebar.success(f"✅ Location selected automatically!")
+                st.sidebar.success(f"✅ Location selected!")
                 st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
                 
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Could not parse coordinates: {e}")
                 zone_info = None
         else:
-            # Check if we have a previously stored location
-            if st.session_state.zone_info is not None:
-                zone_info = st.session_state.zone_info
-                display_label = st.session_state.display_label
+            # Check if we have a previously stored location in session state
+            if 'stored_zone_info' in st.session_state and st.session_state.stored_zone_info is not None:
+                zone_info = st.session_state.stored_zone_info
+                display_label = st.session_state.stored_display_label
                 st.sidebar.info(f"📍 Using previously selected location: {display_label}")
             else:
-                st.sidebar.info("👆 Click on the map above to automatically select a location")
+                if map_coords and map_coords.strip():
+                    st.sidebar.info("👆 Click 'Use Selected Location' to load weather data")
+                else:
+                    st.sidebar.info("👆 Click on the map above to select a location, then click 'Use Selected Location'")
                 zone_info = None
 
     elif location_mode == "📮 Postcode Zone":
@@ -456,8 +450,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         zone_info = IOM_POSTCODE_DB[selected_outcode]
         display_label = selected_outcode
         # Store in session state
-        st.session_state.zone_info = zone_info
-        st.session_state.display_label = display_label
+        st.session_state.stored_zone_info = zone_info
+        st.session_state.stored_display_label = display_label
 
     else:  # Google Maps Link
         gmaps_input = st.sidebar.text_input(
@@ -473,21 +467,21 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 zone_info = {"name": "Pinned Google Maps location", "lat": lat, "lon": lon, "upland_offset": bonus}
                 st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
                 # Store in session state
-                st.session_state.zone_info = zone_info
-                st.session_state.display_label = display_label
+                st.session_state.stored_zone_info = zone_info
+                st.session_state.stored_display_label = display_label
             except Exception as e:
                 location_error = str(e)
 
     if location_error:
         st.sidebar.error(f"⚠️ {location_error}")
 
-    # If no zone_info but we have it in session state, use it
-    if zone_info is None and st.session_state.zone_info is not None:
-        zone_info = st.session_state.zone_info
-        display_label = st.session_state.display_label
+    # If we have zone_info from the button click, store it in session state
+    if zone_info is not None and location_mode == "🗺️ pH Map Click":
+        st.session_state.stored_zone_info = zone_info
+        st.session_state.stored_display_label = display_label
 
     if zone_info is None:
-        st.info("👈 Select a location using the map above or choose a postcode to see live data.")
+        st.info("👈 Select a location using the map above and click 'Use Selected Location', or choose a postcode to see live data.")
         st.stop()
 
     st.subheader(f"🗺️ {display_label}")
