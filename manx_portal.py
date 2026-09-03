@@ -10,7 +10,7 @@ import folium
 from streamlit_folium import st_folium
 from folium.raster_layers import ImageOverlay
 
-# ---------------------------------------------------------------------------
+# By Grok ---------------------------------------------------------------------------
 # Soil pH grid (local JSON produced from SoilGrids 0-5 cm mean)
 # Place iom_ph_grid.json and iom_ph_overlay.png next to this script.
 # ---------------------------------------------------------------------------
