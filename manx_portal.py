@@ -395,9 +395,8 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's My Celium Magic! 
-ZOOM/CLICK ON MAP to check growth conditions")
-#st.heading("🍄 Click on the map where you want to check conditions")
+st.title("🍄 Dr Pablo's My Celium Magic! ZOOM/CLICK ON MAP to check growth conditions")
+st.header("🍄 Click on the map where you want to check conditions")
 #st.heading("🍄 Or use a postcode for checking a more general area")
 
 if "map_click" not in st.session_state:
