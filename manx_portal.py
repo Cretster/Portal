@@ -3,15 +3,18 @@ import requests
 import re
 import plotly.graph_objects as go
 import pydeck as pdk
-from datetime import datetime, timedelta
 import streamlit.components.v1 as components
-import json
+import urllib.parse
+from datetime import datetime, timedelta
 
 # 1. Species Parameter Matrix (edible species only)
 # 1. Species Parameter Matrix (Including restored wild and edible target variants)
 SPECIES_MATRIX = {
-     "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True}
+    "🍄 Liberty Cap (Psilocybe semilanceata)": {"day_min": 8, "day_max": 14, "night_min": 5, "night_max": 9, "rain_trigger": 12, "frost_kill": True},
+    "🍄 Field Mushroom (Agaricus campestris)": {"day_min": 14, "day_max": 20, "night_min": 10, "night_max": 15, "rain_trigger": 10, "frost_kill": False},
+    "🍄 Pearl Oyster (Pleurotus ostreatus)": {"day_min": 10, "day_max": 18, "night_min": 6, "night_max": 12, "rain_trigger": 15, "frost_kill": False}
 }
+
 
 # 2. Isle of Man Geographic Database
 IOM_POSTCODE_DB = {
@@ -25,6 +28,7 @@ IOM_POSTCODE_DB = {
     "IM8": {"name": "Ramsey Town", "lat": 54.32, "lon": -4.38, "upland_offset": 0},
     "IM9": {"name": "Castletown / Ballasalla / Port Erin", "lat": 54.08, "lon": -4.63, "upland_offset": 1}
 }
+
 
 @st.cache_data(ttl=1800)  # cache each location's weather for 30 minutes
 def fetch_live_weather(lat, lon):
@@ -69,6 +73,7 @@ def fetch_live_weather(lat, lon):
         "had_frost": had_frost,
     }
 
+
 @st.cache_data(ttl=1800)
 def fetch_historical_daily(lat, lon, days_back=21, days_forward=5):
     """
@@ -96,6 +101,7 @@ def fetch_historical_daily(lat, lon, days_back=21, days_forward=5):
 
     return dates, day_max, night_min, rain
 
+
 def score_color(score):
     """Traffic-light colour for a given probability score."""
     if score >= 80:
@@ -104,6 +110,7 @@ def score_color(score):
         return "#f1c40f"  # amber
     else:
         return "#e74c3c"  # red
+
 
 def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
     fig = go.Figure()
@@ -148,6 +155,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
     )
     return fig
 
+
 def google_maps_link_to_latlon(url):
     """
     Extracts lat/lon from a Google Maps link, or from raw "lat, lon"
@@ -180,6 +188,7 @@ def google_maps_link_to_latlon(url):
         raise ValueError("Short goo.gl links can't be read directly — open it in a browser once and paste the full address-bar URL instead, or paste coordinates (e.g. 54.150, -4.480).")
     raise ValueError("Couldn't find coordinates in that link. Try pasting raw coordinates instead (e.g. 54.150, -4.480).")
 
+
 @st.cache_data(ttl=86400)  # elevation doesn't change, cache for a day
 def get_elevation_bonus(lat, lon):
     """
@@ -192,6 +201,7 @@ def get_elevation_bonus(lat, lon):
     elevation = resp.json()["elevation"][0]
     bonus = min(4, int(elevation // 50))
     return bonus, elevation
+
 
 def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus, s_rules):
     if s_rules["frost_kill"] and has_had_frost:
@@ -211,6 +221,7 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
         verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe growth right now."
 
     return total_score, verdict, day_score, night_score, rain_score
+
 
 def render_location_map(lat, lon, label):
     """
@@ -242,344 +253,178 @@ def render_location_map(lat, lon, label):
         map_style=None,
     ))
 
-def render_ph_map_with_picker():
+def ph_map_selector():
     """
-    Renders the pH map as an HTML component with click-to-select functionality.
-    When a point is clicked, it sends coordinates back to Streamlit.
+    Renders the pH map and returns coordinates when a location is clicked.
+    Uses a simple iframe approach to avoid string interpolation issues.
     """
-    # Read the HTML file content
-    with open('WorkingPHmap.html', 'r') as f:
-        html_content = f.read()
+    # Use session state to store coordinates
+    if 'ph_map_coords' not in st.session_state:
+        st.session_state.ph_map_coords = ""
     
-    # Inject JavaScript to communicate with Streamlit
-    # We'll wrap the existing map and add a click handler that sends coordinates to Streamlit
-    map_html = f"""
+    # Read the HTML file
+    try:
+        with open('WorkingPHmap.html', 'r') as f:
+            map_html = f.read()
+    except FileNotFoundError:
+        st.warning("⚠️ WorkingPHmap.html not found. Please make sure the file is in the same directory.")
+        return ""
+    
+    # Add JavaScript to the map to capture clicks
+    # We inject this right before the closing </body> tag
+    click_capture_script = """
+    <script>
+    // Add click handler to send coordinates to parent
+    (function() {
+        // Wait for map to be ready
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        function setupClickHandler() {
+            const mapContainer = document.getElementById('map');
+            if (mapContainer) {
+                // Add click listener to the map container
+                mapContainer.addEventListener('click', function(e) {
+                    // Wait for the popup to appear with coordinates
+                    setTimeout(function() {
+                        const popup = document.querySelector('.leaflet-popup-content');
+                        if (popup) {
+                            const content = popup.textContent;
+                            const match = content.match(/(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)/);
+                            if (match) {
+                                const lat = parseFloat(match[1]);
+                                const lng = parseFloat(match[2]);
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    const coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+                                    // Send to parent (Streamlit)
+                                    if (window.parent) {
+                                        window.parent.postMessage({
+                                            type: 'streamlit:setComponentValue',
+                                            value: coordStr
+                                        }, '*');
+                                    }
+                                }
+                            }
+                        }
+                    }, 300);
+                });
+                return true;
+            }
+            return false;
+        }
+        
+        function trySetup() {
+            if (setupClickHandler()) {
+                return;
+            }
+            attempts++;
+            if (attempts < maxAttempts) {
+                setTimeout(trySetup, 500);
+            }
+        }
+        
+        // Start trying to set up the click handler
+        setTimeout(trySetup, 1000);
+    })();
+    </script>
+    """
+    
+    # Insert the script before </body>
+    map_html_with_script = map_html.replace('</body>', click_capture_script + '</body>')
+    
+    # URL encode the map HTML for embedding in an iframe
+    encoded_map = urllib.parse.quote(map_html_with_script)
+    
+    # Create a wrapper HTML with the map in an iframe
+    wrapper_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Isle of Man – Soil pH (embedded GeoTIFF)</title>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <meta charset="UTF-8">
         <style>
-            html, body {{ height: 100%; margin: 0; font-family: system-ui, sans-serif; }}
-            #map {{ height: 100%; width: 100%; }}
-            .info {{
-                padding: 10px 12px;
-                background: rgba(255,255,255,0.93);
-                box-shadow: 0 0 15px rgba(0,0,0,0.2);
-                border-radius: 6px;
-                line-height: 1.45;
-                max-width: 300px;
-                font-size: 13px;
+            body {{ margin: 0; padding: 0; background: #f5f5f5; }}
+            #container {{ height: 580px; width: 100%; position: relative; }}
+            iframe {{ 
+                width: 100%; 
+                height: 100%; 
+                border: none;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }}
-            .info h4 {{ margin: 0 0 6px; font-size: 14px; }}
-            .legend i {{
-                width: 18px; height: 14px; float: left; margin-right: 8px;
-                opacity: 0.9; border: 1px solid #999;
-            }}
-            .ph-value {{ font-size: 18px; font-weight: 600; color: #1a5276; }}
-            .note {{ font-size: 11px; color: #555; margin-top: 8px; }}
-            .loading {{ color: #888; font-style: italic; }}
-            .click-hint {{
+            #status {{
                 position: absolute;
                 bottom: 20px;
                 left: 50%;
                 transform: translateX(-50%);
-                background: rgba(0,0,0,0.7);
+                background: rgba(0,0,0,0.75);
                 color: white;
-                padding: 8px 16px;
-                border-radius: 20px;
-                font-size: 14px;
-                z-index: 1000;
+                padding: 6px 16px;
+                border-radius: 16px;
+                font-size: 13px;
+                font-family: system-ui, sans-serif;
                 pointer-events: none;
-                opacity: 0.8;
+                z-index: 10;
             }}
         </style>
     </head>
     <body>
-        <div id="map"></div>
-        <div class="click-hint">Click anywhere on land to select location</div>
-
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
-
+        <div id="container">
+            <iframe id="mapFrame" src="data:text/html;charset=utf-8,{encoded_map}"></iframe>
+            <div id="status">🖱️ Click anywhere on land to select location</div>
+        </div>
         <script>
-            // ========== EMBEDDED GeoTIFF (base64) ==========
-            // SoilGrids phh2o 0-5cm mean for Isle of Man (~250 m)
-            // Values are pH × 10 (integer). Nodata = -32768
-            const TIF_BASE64 = "SUkqAAgAAAAWAAABAwABAAAAugAAAAEBAwABAAAA3gAAAAIBAwABAAAAEAAAAAMBAwABAAAACAAAAAYBAwABAAAAAQAAABUBAwABAAAAAQAAABoBBQABAAAAFgEAABsBBQABAAAAHgEAABwBAwABAAAAAQAAACgBAwABAAAAAgAAAD0BAwABAAAAAgAAAEIBAwABAAAAAAEAAEMBAwABAAAAAAEAAEQBBAABAAAAzgEAAEUBBAABAAAAmB4AAFMBAwABAAAAAgAAAA6DDAADAAAALgEAAIKEDAAGAAAARgEAAK+HAwAgAAAAdgEAALCHDAACAAAAtgEAALGHAgAIAAAAxgEAAIGkAgAHAAAAJgEAAAAAAABIAAAAAQAAAEgAAAABAAAALTMyNzY4AABQ1uMvsqBsP/enKzFWc2I/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABohTnkmJkTwLdHfQkAQEtAAAAAAAAAAAABAAEAAAAHAAAEAAABAAIAAQQAAAEAAQAACAAAAQDmEAEIsYcHAAAABggAAAEAjiMJCLCHAQABAAsIsIcBAAAAiG10lh2kckAAAABAplRYQVdHUyA4NHwAeF7sW9Fy2zYQXIBOfsqW5H6Z8Wlt0vaf2pC8ztziCDbTPtiEkrXBzYxEUVRmvXu4OwAkCk78aChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRlFChprsRFHLdilvDby3birVDSXImLJJ5LgjmADODX0/+hcHX/v7xcSkY6/R8Q3SNASXMlLqJ4LECGWYZZAvDl9P/D4laA5D6vBpgtNvl5swwgY+3RASpprsTlp+NW1WC3B8CjICN5TMAjADA7GAFKmitx+em4ldXotNnkWWAxYKreE+f4/7i4lHXL92YJCavnfYJn0tn/fQBca50n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";
-
-            function base64ToArrayBuffer(base64) {
-                const binary = atob(base64);
-                const len = binary.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-                return bytes.buffer;
-            }
-
-            // ========== MAP ==========
-            const iomBounds = L.latLngBounds([54.04, -4.85], [54.43, -4.30]);
-
-            const map = L.map('map', {
-                center: [54.23, -4.55],
-                zoom: 10,
-                maxBounds: iomBounds.pad(0.4),
-                minZoom: 8
-            });
-
-            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {
-                attribution: '&copy; OpenStreetMap | Soil data: SoilGrids / ISRIC (CC-BY 4.0)',
-                maxZoom: 19
-            }).addTo(map);
-
-            map.fitBounds(iomBounds);
-
-            // ========== INFO PANEL ==========
-            const info = L.control({ position: 'topright' });
-            info.onAdd = function () {
-                this._div = L.DomUtil.create('div', 'info');
-                this._div.innerHTML = '<h4>Isle of Man Soil pH</h4><div class="loading">Loading embedded GeoTIFF…</div>';
-                return this._div;
-            };
-            info.update = function (lat, lng, ph) {
-                let html = '<h4>Isle of Man Soil pH (0–5 cm)</h4>';
-                html += '<div class="legend">';
-                html += '<i style="background:#d73027"></i> &lt; 5.0<br>';
-                html += '<i style="background:#fc8d59"></i> 5.0 – 5.5 <b>(possible)</b><br>';
-                html += '<i style="background:#fee08b"></i> 5.5 – 6.0 <b>(best!)</b><br>';
-                html += '<i style="background:#d9ef8b"></i> 6.0 – 6.5 <b>(possible)</b><br>';
-                html += '<i style="background:#91cf60"></i> 6.5 – 7.0<br>';
-                html += '<i style="background:#1a9850"></i> &gt; 7.0<br>';
-                html += '</div>';
-                if (ph != null) {
-                    html += `<div style="margin-top:10px">Clicked: ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
-                             <span class="ph-value">pH ≈ ${ph.toFixed(1)}</span></div>`;
-                } else {
-                    html += '<div style="margin-top:8px;color:#666">Click anywhere on land to read pH</div>';
-                }
-                html += '<div class="note">Data: SoilGrids 250 m mean prediction (embedded local GeoTIFF). Values are model estimates. Most of the island falls in the 5–6.5 range.</div>';
-                this._div.innerHTML = html;
-            };
-            info.addTo(map);
-
-            // ========== LOAD & SAMPLE ==========
-            let tiffImage = null;
-            let rasterWidth, rasterHeight, bbox; // [west, south, east, north]
-
-            async function loadTiff() {
-                try {
-                    const arrayBuffer = base64ToArrayBuffer(TIF_BASE64);
-                    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
-                    tiffImage = await tiff.getImage();
-                    rasterWidth = tiffImage.getWidth();
-                    rasterHeight = tiffImage.getHeight();
-                    bbox = tiffImage.getBoundingBox(); // [west, south, east, north]
-                    console.log('GeoTIFF loaded', rasterWidth, '×', rasterHeight, 'bbox', bbox);
-                    info.update(null, null, null);
-                } catch (err) {
-                    console.error(err);
-                    info._div.innerHTML = '<h4>Error</h4><p>Could not decode the embedded GeoTIFF.<br>' + err.message + '</p>';
-                }
-            }
-
-            async function samplePh(lat, lng) {
-                if (!tiffImage) return null;
-                const [west, south, east, north] = bbox;
-                const x = Math.floor((lng - west) / (east - west) * rasterWidth);
-                const y = Math.floor((north - lat) / (north - south) * rasterHeight);
-                if (x < 0 || x >= rasterWidth || y < 0 || y >= rasterHeight) return null;
-
-                const data = await tiffImage.readRasters({
-                    window: [x, y, x + 1, y + 1],
-                    width: 1,
-                    height: 1
-                });
-                const raw = data[0][0];
-                if (raw === -32768 || raw === undefined || isNaN(raw)) return null;
-                return raw / 10.0;
-            }
-
-            // ========== CLICK HANDLER - SEND TO STREAMLIT ==========
-            map.on('click', async function (e) {
-                const { lat, lng } = e.latlng;
-                const ph = await samplePh(lat, lng);
-                info.update(lat, lng, ph);
-
-                let content;
-                if (ph != null) {
-                    content = `<b>pH ≈ ${ph.toFixed(1)}</b><br>
-                               ${lat.toFixed(5)}, ${lng.toFixed(5)}<br>
-                               <small>SoilGrids 0–5 cm mean prediction</small>`;
-                } else {
-                    content = `No data (sea or outside raster)<br>${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                }
-                L.popup().setLatLng(e.latlng).setContent(content).openOn(map);
-
-                // Send coordinates to Streamlit
-                const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                window.parent.postMessage({
-                    type: 'streamlit:setComponentValue',
-                    value: coordStr
-                }, '*');
-                
-                // Also send a custom event that we can catch
-                window.parent.postMessage({
-                    type: 'streamlit:locationSelected',
-                    lat: lat,
-                    lng: lng,
-                    ph: ph
-                }, '*');
-            });
-
-            async function addColourOverlay() {
-                if (!tiffImage) return;
-                const data = await tiffImage.readRasters();
-                const values = data[0];
-                const canvas = document.createElement('canvas');
-                canvas.width = rasterWidth;
-                canvas.height = rasterHeight;
-                const ctx = canvas.getContext('2d');
-                const imgData = ctx.createImageData(rasterWidth, rasterHeight);
-
-                function colour(ph) {
-                    if (ph < 5.0) return [215, 48, 39, 160];
-                    if (ph < 5.5) return [252, 141, 89, 160];
-                    if (ph < 6.0) return [254, 224, 139, 160];
-                    if (ph < 6.5) return [217, 239, 139, 180];
-                    if (ph < 7.0) return [145, 207, 96, 160];
-                    return [26, 152, 80, 160];
-                }
-
-                for (let i = 0; i < values.length; i++) {
-                    const raw = values[i];
-                    const ph = (raw === -32768) ? NaN : raw / 10;
-                    const c = isNaN(ph) ? [0,0,0,0] : colour(ph);
-                    imgData.data[i*4]     = c[0];
-                    imgData.data[i*4 + 1] = c[1];
-                    imgData.data[i*4 + 2] = c[2];
-                    imgData.data[i*4 + 3] = c[3];
-                }
-                ctx.putImageData(imgData, 0, 0);
-
-                const [west, south, east, north] = bbox;
-                const overlay = L.imageOverlay(canvas.toDataURL(), [[south, west], [north, east]], {
-                    opacity: 0.65,
-                    interactive: false
-                }).addTo(map);
-
-                const opacityCtrl = L.control({ position: 'bottomleft' });
-                opacityCtrl.onAdd = function () {
-                    const div = L.DomUtil.create('div', 'info');
-                    div.innerHTML = `<label style="font-size:12px">Overlay opacity
-                        <input type="range" min="0" max="1" step="0.05" value="0.65" id="op">
-                    </label>`;
-                    L.DomEvent.disableClickPropagation(div);
-                    return div;
-                };
-                opacityCtrl.addTo(map);
-                document.getElementById('op').addEventListener('input', function () {
-                    overlay.setOpacity(parseFloat(this.value));
-                });
-            }
-
-            loadTiff().then(addColourOverlay);
+            // Listen for messages from the iframe
+            window.addEventListener('message', function(event) {{
+                if (event.data && event.data.type === 'streamlit:setComponentValue') {{
+                    const coordStr = event.data.value;
+                    // Update status
+                    document.getElementById('status').textContent = '📍 ' + coordStr;
+                    // Try to update the Streamlit input
+                    try {{
+                        const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
+                        inputs.forEach(function(input) {{
+                            if (input.id && input.id.includes('ph_map_coord_input')) {{
+                                input.value = coordStr;
+                                input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            }}
+                        }});
+                    }} catch(e) {{
+                        // Cross-origin issues, ignore
+                    }}
+                }}
+            }});
         </script>
     </body>
     </html>
     """
     
-    # Render the HTML component with a specific height
-    # Use components.html and capture any messages from the component
-    components.html(map_html, height=600, scrolling=False)
+    # Render the component
+    components.html(wrapper_html, height=620, scrolling=False)
     
-    # The coordinates will be sent via the JavaScript postMessage
-    # We'll need to handle this with a custom component that listens for messages
-    # For now, we'll use a workaround with session state
-
-# Add a custom component that listens for messages from the pH map
-def ph_map_selector():
-    """
-    Custom component that renders the pH map and listens for click events.
-    Returns the coordinates as a string when a location is clicked.
-    """
-    # This is a simplified approach - in practice, you'd want to use st.components.v1.html
-    # with a custom message handler. For now, we'll use a text input approach.
-    
-    # Create a hidden text input that will be updated by JavaScript
-    # We'll use a workaround with st.markdown and JavaScript injection
-    st.markdown("""
-    <style>
-        .map-coord-input { display: none; }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Use a session state variable to store the clicked coordinates
-    if 'clicked_coords' not in st.session_state:
-        st.session_state.clicked_coords = ""
-    
-    # Render the map
-    with open('WorkingPHmap.html', 'r') as f:
-        html_content = f.read()
-    
-    # We need to modify the HTML to store the clicked coordinates in a visible element
-    # that Streamlit can read via a text input
-    # For simplicity, we'll use a text input that is updated by JavaScript
-    
-    # Since we can't easily do bidirectional communication with components.html,
-    # we'll use a different approach: use a text input with JavaScript injection
-    
-    # For now, let's use the simple approach: render the map and use a text input
-    # that the user can manually enter coordinates into, or they can click the map
-    # and we'll auto-fill it via a custom component
-    
-    # Actually, let me use the approach of loading the map and using a callback
-    # with a custom component
-    
-    # I'll use a simpler approach: just render the HTML and have it update a text input
-    map_html_modified = html_content.replace(
-        'window.parent.postMessage({type: \'streamlit:locationSelected\', lat: lat, lng: lng, ph: ph}, \'*\');',
-        '''
-        window.parent.postMessage({type: 'streamlit:locationSelected', lat: lat, lng: lng, ph: ph}, '*');
-        // Also update the hidden input
-        const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        const input = document.getElementById('map_coord_input');
-        if (input) {
-            input.value = coordStr;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        '''
-    )
-    
-    # Add a hidden input to the HTML
-    map_html_with_input = map_html_modified.replace(
-        '<div id="map"></div>',
-        '''
-        <div id="map"></div>
-        <input type="text" id="map_coord_input" style="display:none;" />
-        '''
-    )
-    
-    # Render the map
-    components.html(map_html_with_input, height=600, scrolling=False)
-    
-    # Use a text input that can be manually edited or auto-filled
-    coord_input = st.text_input(
-        "Selected coordinates (or paste lat, lon):",
-        value=st.session_state.clicked_coords,
-        placeholder="54.150, -4.480",
-        key="map_coord_input"
-    )
+    # Text input for coordinates (manual entry or auto-filled from map)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        coord_input = st.text_input(
+            "📍 Selected Coordinates:",
+            value=st.session_state.ph_map_coords,
+            placeholder="Click on the map above or paste coordinates (e.g., 54.150, -4.480)",
+            key="ph_map_coord_input",
+            help="Click on the pH map above to auto-fill coordinates, or type them manually"
+        )
+    with col2:
+        st.write("")
+        if st.button("📍 Use Map Selection", help="Re-focus on the map to select a location"):
+            pass  # Just a visual button, the map handles selection
     
     # Update session state
-    if coord_input != st.session_state.clicked_coords:
-        st.session_state.clicked_coords = coord_input
+    if coord_input != st.session_state.ph_map_coords:
+        st.session_state.ph_map_coords = coord_input
     
     return coord_input
 
 # --- FRONTEND ---
-st.set_page_config(page_title="Dr Pablo's Mushroom Portal", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's My Celium Portal")
+st.set_page_config(page_title="Manx Mushroom Portal", page_icon="🍄", layout="wide")
+st.title("🍄 Real-Time Isle of Man Mycological Observation Dashboard")
 
 st.sidebar.header("Target Organism Matrix")
 selected_species = st.sidebar.selectbox("Select Target Variety:", list(SPECIES_MATRIX.keys()))
@@ -596,10 +441,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     st.sidebar.markdown("---")
     st.sidebar.header("Location Source")
     location_mode = st.sidebar.radio("Specify location by:", ["📮 Postcode Zone", "🗺️ pH Map Click", "🔗 Google Maps Link"])
-
     zone_info = None
     location_error = None
-    coords_from_map = ""
 
     if location_mode == "📮 Postcode Zone":
         selected_outcode = st.sidebar.selectbox("Select Target Postcode:", list(IOM_POSTCODE_DB.keys()))
@@ -608,54 +451,36 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
     elif location_mode == "🗺️ pH Map Click":
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### Click on the map below to select a location")
-        st.sidebar.markdown("The map shows soil pH data - click anywhere on land to get coordinates and pH value.")
+        st.sidebar.markdown("### 🗺️ Click on the map to select a location")
+        st.sidebar.markdown("The map shows soil pH data - click anywhere on land to select that location.")
         
-        # Display the pH map with click-to-select functionality
-        # We'll use a custom component approach
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            # Use our custom map selector
-            map_coords = ph_map_selector()
-            
-            if map_coords and map_coords.strip():
-                try:
-                    # Parse the coordinates
-                    lat_str, lon_str = map_coords.split(',')
-                    lat = float(lat_str.strip())
-                    lon = float(lon_str.strip())
-                    
-                    # Get elevation bonus
-                    bonus, elevation = get_elevation_bonus(lat, lon)
-                    zone_info = {
-                        "name": f"pH Map Location ({lat:.5f}, {lon:.5f})",
-                        "lat": lat,
-                        "lon": lon,
-                        "upland_offset": bonus
-                    }
-                    display_label = f"📍 {lat:.5f}, {lon:.5f}"
-                    st.sidebar.success(f"✅ Selected: {display_label}")
-                    st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-                except:
-                    st.sidebar.warning("⚠️ Please click on the map to select a location")
-            else:
-                st.sidebar.info("👆 Click anywhere on the map to select a location")
+        # Display the map and get coordinates
+        map_coords = ph_map_selector()
         
-        with col2:
-            st.markdown("### pH Map Legend")
-            st.markdown("""
-            <div style="background: rgba(255,255,255,0.9); padding: 10px; border-radius: 8px;">
-                <div><span style="display:inline-block; width:20px; height:20px; background:#d73027; border-radius:4px;"></span> &lt; 5.0</div>
-                <div><span style="display:inline-block; width:20px; height:20px; background:#fc8d59; border-radius:4px;"></span> 5.0 – 5.5</div>
-                <div><span style="display:inline-block; width:20px; height:20px; background:#fee08b; border-radius:4px;"></span> 5.5 – 6.0 <b>★ best!</b></div>
-                <div><span style="display:inline-block; width:20px; height:20px; background:#d9ef8b; border-radius:4px;"></span> 6.0 – 6.5</div>
-                <div><span style="display:inline-block; width:20px; height:20px; background:#91cf60; border-radius:4px;"></span> 6.5 – 7.0</div>
-                <div><span style="display:inline-block; width:20px; height:20px; background:#1a9850; border-radius:4px;"></span> &gt; 7.0</div>
-            </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                Click map to select location &amp; see pH
-            </div>
-            """, unsafe_allow_html=True)
+        if map_coords and map_coords.strip():
+            try:
+                # Parse the coordinates
+                lat_str, lon_str = map_coords.split(',')
+                lat = float(lat_str.strip())
+                lon = float(lon_str.strip())
+                
+                # Get elevation bonus
+                bonus, elevation = get_elevation_bonus(lat, lon)
+                zone_info = {
+                    "name": f"pH Map Location ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": bonus
+                }
+                display_label = f"📍 {lat:.5f}, {lon:.5f}"
+                st.sidebar.success(f"✅ Selected: {display_label}")
+                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ Could not parse coordinates: {e}")
+                zone_info = None
+        else:
+            st.sidebar.info("👆 Click on the map above to select a location")
+            zone_info = None
 
     else:  # Google Maps Link
         gmaps_input = st.sidebar.text_input(
@@ -776,13 +601,13 @@ else:
     def render_zone_picker(column, zone_num, default_postcode_index):
         column.markdown(f"**Zone {zone_num}**")
         mode = column.radio("Source:", ["📮 Postcode", "🗺️ pH Map", "🔗 Maps/Coords"], key=f"zone{zone_num}_mode", label_visibility="collapsed")
+        
         if mode == "📮 Postcode":
             outcode = column.selectbox("Postcode:", list(IOM_POSTCODE_DB.keys()), index=default_postcode_index, key=f"zone{zone_num}_postcode", label_visibility="collapsed")
             return {"label": outcode, **IOM_POSTCODE_DB[outcode]}
         elif mode == "🗺️ pH Map":
-            # For the comparison view, we'll use a simpler approach - just a text input
-            # where the user can paste coordinates from the pH map
             coords = column.text_input("Coordinates from pH map:", placeholder="54.150, -4.480", key=f"zone{zone_num}_phmap", label_visibility="collapsed")
+            column.caption("Click the pH map in the main view to get coordinates, then paste here")
             if coords:
                 try:
                     lat_str, lon_str = coords.split(',')
@@ -792,12 +617,12 @@ else:
                     column.caption(f"📐 ~{elevation}m (bonus +{bonus})")
                     return {"label": f"pH Map ({lat:.4f}, {lon:.4f})", "name": "pH Map location", "lat": lat, "lon": lon, "upland_offset": bonus}
                 except:
-                    column.error("⚠️ Invalid coordinates")
+                    column.error("⚠️ Invalid coordinates format. Use: latitude, longitude")
                     return None
             else:
-                column.info("Enter coordinates")
+                column.info("Enter coordinates from pH map")
                 return None
-        else:
+        else:  # Maps/Coords
             raw = column.text_input("Location:", placeholder="54.150, -4.480 or Maps URL", key=f"zone{zone_num}_custom", label_visibility="collapsed")
             if not raw:
                 return None
