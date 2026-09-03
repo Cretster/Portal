@@ -71,7 +71,7 @@ def ph_legend_html(ph_value=None):
         parts.append(
             '<div style="margin-top:14px;padding:12px 14px;background:#e8f4fc;'
             'border-left:5px solid #1a5276;border-radius:4px">'
-            '<div style="font-size:20px;color:#555;margin-bottom:2px">'
+            '<div style="font-size:28px;font-weight:700;color:#555;margin-bottom:2px">'
             "Chosen Location Soil pH:</div>"
             f'<div style="font-size:28px;font-weight:700;color:#1a5276;'
             f'letter-spacing:0.02em">pH ≈ {ph_value:.1f}</div>'
