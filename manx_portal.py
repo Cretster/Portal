@@ -384,12 +384,12 @@ def ph_map_selector():
     # Render the component
     components.html(wrapper_html, height=620, scrolling=False)
     
-    # Create the text input (now hidden since it auto-updates)
+    # Create a hidden text input to store the coordinates (no duplicate key issue)
     coord_input = st.text_input(
         "📍 Selected Coordinates:",
         value=st.session_state.ph_map_coords,
         placeholder="Click on the map above to select a location",
-        key="ph_map_coord_input",
+        key="ph_map_coord_input_unique",
         help="Click on the pH map above to auto-fill coordinates",
         label_visibility="collapsed"
     )
@@ -428,9 +428,6 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🗺️ Click on the map to select a location")
         st.sidebar.markdown("The map shows soil pH data - click anywhere on land to automatically select that location and load weather data.")
-        
-        # Create a placeholder for the coordinates
-        coord_placeholder = st.empty()
         
         # Display the map and get coordinates
         map_coords = ph_map_selector()
@@ -491,10 +488,6 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
     if zone_info is None:
         st.info("👈 Select a location using the map above or choose a postcode to see live data.")
-        # Show the map even when no location is selected
-        st.markdown("### 🗺️ Click the map below to select your location")
-        # Display a smaller version of the map as a fallback
-        ph_map_selector()
         st.stop()
 
     st.subheader(f"🗺️ {display_label}")
