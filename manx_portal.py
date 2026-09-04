@@ -550,8 +550,10 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 or abs(prev["lon"] - lon) > 1e-6
             ):
                 st.session_state.map_click = new_click
-                # Do not rewrite zoom here — session zoom (buttons) is what sticks.
-                # Keep centre as-is so a pin drop does not jump the view more than needed.
+                # Centre on the pin so it stays on-screen after remount.
+                # Keep the current (button) zoom so the level does not reset.
+                st.session_state.map_view["lat"] = lat
+                st.session_state.map_view["lon"] = lon
                 st.session_state.map_initialized = True
 
         # Build zone_info from the saved pin so weather/scores render below
