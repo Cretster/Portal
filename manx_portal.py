@@ -405,7 +405,8 @@ st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", la
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
 st.subheader("Then scroll down for probability info below")
-st.caption("🍄 Tip: zoom/pan freely first, then click once to drop the pin. Opacity changes will briefly remount the map.")
+st.caption("🍄 Please note the map glitches a little and may need to click more than once to set location")
+st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
@@ -508,19 +509,37 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             fit_island=fit_island,
         )
 
-        # IMPORTANT for stability:
-        # Returning "zoom"/"center" makes Streamlit rerun on EVERY pan/zoom, which
-        # remounts the Leaflet map and feels like a refresh/jump.
-        # Only return last_clicked so pan/zoom stay client-side until a pin is set.
+        # Return zoom/center so we can SAVE the user's view when they click.
+        # (Pan still updates these; we write them into session_state so a pin
+        # drop rebuilds at the same zoom instead of the default.)
         map_data = st_folium(
             fmap,
             width=None,
             height=520,
-            returned_objects=["last_clicked"],
+            returned_objects=["last_clicked", "zoom", "center"],
             key="iom_ph_map_stable",
         )
 
-        # Pin update only — do NOT rewrite map centre/zoom (avoids jump-on-click)
+        # Persist current view whenever Leaflet reports it
+        if map_data:
+            z = map_data.get("zoom")
+            c = map_data.get("center")
+            if z is not None:
+                try:
+                    z_int = int(round(float(z)))
+                    st.session_state.map_view["zoom"] = z_int
+                    st.session_state.map_initialized = True
+                except (TypeError, ValueError):
+                    pass
+            if c:
+                lat_c = c.get("lat")
+                lon_c = c.get("lng", c.get("lon"))
+                if lat_c is not None and lon_c is not None:
+                    st.session_state.map_view["lat"] = float(lat_c)
+                    st.session_state.map_view["lon"] = float(lon_c)
+                    st.session_state.map_initialized = True
+
+        # Pin update — view (zoom/centre) already saved above from the same map_data
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
@@ -534,8 +553,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             ):
                 st.session_state.map_click = new_click
                 st.session_state.map_initialized = True
-                # No explicit st.rerun() — Streamlit reruns after session_state write.
-                # Avoids a double-remount that can reset zoom.
+                # Do NOT call st.rerun() — avoids a double remount that resets zoom.
+                # Streamlit will rerun once after session_state is written.
 
         if st.session_state.map_click:
             lat = st.session_state.map_click["lat"]
@@ -628,15 +647,17 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             frost_input = st.toggle("Active Ground Frost Event?", value=False, key="fb_frost")
 
     with right_panel:
-        st.subheader("🧬 Environmental Factor Scorecard")
+        st.subheader("WEATHER CONDITIONS SCORE %")
 
         prob, verdict, d_s, n_s, r_s = calculate_precise_index(
             d_temp, n_temp, rain, frost_input, zone_info["upland_offset"], rules
         )
 
-        st.metric(label=f"Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
+        st.metric(label=f"NEW GROWTH* Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
+
         st.progress(prob / 100)
-        st.markdown(f"### Status: {verdict}")
+        st.markdown(f"### NEW Growth Status*: {verdict}")
+        st.subheader("*Check Graph below for recent conditions & likeliness of existing growth")
         st.markdown("---")
 
         st.markdown("### Score Breakdown")
