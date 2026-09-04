@@ -202,7 +202,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
             x=[dates[i], dates[i + 1]], y=[scores[i], scores[i + 1]],
             mode="lines", line=dict(color=seg_color, width=6),
             yaxis="y2", showlegend=first_seg,
-            name="FRUITING PROBABILITY! (%)",
+            name="FRUITING PROBABILITY % (thick line - red/orange/green)",
             legendgroup="probability", hoverinfo="skip",
         ))
         first_seg = False
