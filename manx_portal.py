@@ -398,6 +398,7 @@ st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", la
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
 st.subheader("🍄 (Then scroll for probability info below)")
+st.caption("🍄 Please note the map glitches a little and may need to click more than once to set location")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
