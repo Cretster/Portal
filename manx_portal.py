@@ -648,15 +648,17 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             frost_input = st.toggle("Active Ground Frost Event?", value=False, key="fb_frost")
 
     with right_panel:
-        st.subheader("🧬 Environmental Factor Scorecard")
+        st.subheader("WEATHER CONDITIONS SCORE %")
 
         prob, verdict, d_s, n_s, r_s = calculate_precise_index(
             d_temp, n_temp, rain, frost_input, zone_info["upland_offset"], rules
         )
 
-        st.metric(label=f"Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
+        st.metric(label=f"NEW GROWTH* Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
+
         st.progress(prob / 100)
         st.markdown(f"### NEW Growth Status*: {verdict}")
+        st.metric(label=f"Check Graph below for recent conditions likeliness of existing growth", value=f"{prob}%", border=True)
         st.markdown("---")
 
         st.markdown("### Score Breakdown")
