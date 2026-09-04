@@ -406,6 +406,7 @@ st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
 st.subheader("Then scroll down for probability info below")
 st.caption("🍄 Please note the map glitches a little and may need to click more than once to set location")
+st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
