@@ -656,7 +656,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
         st.metric(label=f"Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
         st.progress(prob / 100)
-        st.markdown(f"### Status: {verdict}")
+        st.markdown(f"### NEW Growth Status*: {verdict}")
         st.markdown("---")
 
         st.markdown("### Score Breakdown")
