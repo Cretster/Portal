@@ -406,6 +406,117 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
     return m
 
 
+
+
+def ph_focus_sample_points(grid_meta, ph_min=6.0, ph_max=8.0, stride=4):
+    """
+    Sample lat/lon points from the pH grid where ph_min <= pH <= ph_max.
+    stride>1 thins the grid so weather API calls stay reasonable.
+    """
+    if grid_meta is None:
+        return []
+    ph_grid = grid_meta.get("ph_grid") or grid_meta.get("grid")
+    if not ph_grid:
+        return []
+    west, south = grid_meta["west"], grid_meta["south"]
+    east, north = grid_meta["east"], grid_meta["north"]
+    width, height = grid_meta["width"], grid_meta["height"]
+    points = []
+    for y in range(0, height, stride):
+        for x in range(0, width, stride):
+            ph = ph_grid[y][x]
+            if ph is None:
+                continue
+            if ph_min <= ph <= ph_max:
+                lat = north - (y + 0.5) / height * (north - south)
+                lon = west + (x + 0.5) / width * (east - west)
+                points.append({"lat": lat, "lon": lon, "ph": ph})
+    return points
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def score_point_for_growth(lat, lon, species_key):
+    """Live weather + elevation → fruiting probability for one sample point."""
+    rules = SPECIES_MATRIX[species_key]
+    try:
+        weather = fetch_live_weather(lat, lon)
+        bonus, elev = get_elevation_bonus(lat, lon)
+        score, verdict, _, _, _ = calculate_precise_index(
+            weather["day_temp"], weather["night_temp"], weather["rain_48h"],
+            weather["had_frost"], bonus, rules,
+        )
+        return {
+            "score": score,
+            "verdict": verdict,
+            "day_temp": weather["day_temp"],
+            "night_temp": weather["night_temp"],
+            "rain_48h": weather["rain_48h"],
+            "frost": weather["had_frost"],
+            "elevation": elev,
+            "bonus": bonus,
+        }
+    except Exception as e:
+        return {"score": None, "error": str(e)}
+
+
+def build_growth_conditions_map(points_with_scores, zoom=10):
+    """Folium map: coloured circles for growth probability (pH 6–8 areas only)."""
+    m = folium.Map(
+        location=[54.23, -4.55],
+        zoom_start=zoom,
+        tiles="OpenStreetMap",
+    )
+    m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
+
+    for pt in points_with_scores:
+        score = pt.get("score")
+        if score is None:
+            continue
+        colour = score_color(score)
+        popup = (
+            f"<b>Growth score: {score}%</b><br>"
+            f"pH ≈ {pt['ph']:.1f}<br>"
+            f"Day {pt.get('day_temp', '—')}°C / Night {pt.get('night_temp', '—')}°C<br>"
+            f"Rain 48h: {pt.get('rain_48h', '—')} mm<br>"
+            f"{pt.get('lat', 0):.4f}, {pt.get('lon', 0):.4f}"
+        )
+        folium.CircleMarker(
+            location=[pt["lat"], pt["lon"]],
+            radius=9,
+            color=colour,
+            weight=1,
+            fill=True,
+            fill_color=colour,
+            fill_opacity=0.75,
+            popup=folium.Popup(popup, max_width=260),
+            tooltip=f"{score}% · pH {pt['ph']:.1f}",
+        ).add_to(m)
+
+    # Simple legend as HTML under the map (rendered in Streamlit)
+    return m
+
+
+def growth_map_legend_html():
+    return (
+        '<div style="font-size:13px;line-height:1.5;padding:10px 12px;'
+        'background:#f7f9fb;border:1px solid #d0d7de;border-radius:8px;margin-top:8px">'
+        "<b>Growth probability shading</b> (same scale as the scorecard)<br>"
+        '<span style="display:inline-block;width:14px;height:14px;background:#2ecc71;'
+        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
+        "🟢 ≥80% excellent &nbsp;&nbsp;"
+        '<span style="display:inline-block;width:14px;height:14px;background:#f1c40f;'
+        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
+        "🟡 50–79% moderate &nbsp;&nbsp;"
+        '<span style="display:inline-block;width:14px;height:14px;background:#e74c3c;'
+        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
+        "🔴 &lt;50% poor<br>"
+        '<span style="font-size:11px;color:#666">Only cells with soil pH 6.0–8.0 are shown. '
+        "Colours use live Open-Meteo weather + the same scoring model as above. "
+        "Sampled grid (not every 250 m cell) to keep API use reasonable.</span>"
+        "</div>"
+    )
+
+
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
@@ -730,6 +841,60 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
     except Exception as e:
         st.error(f"⚠️ Could not load historical trend data ({e}).")
+
+
+    # ------------------------------------------------------------------
+    # Island growth-conditions map (pH 6–8 only, score colours)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🗺️ Island growth conditions (pH 6.0–8.0 zones)")
+    st.caption(
+        "Coloured dots show live fruiting-probability scores for areas where soil pH is "
+        "between 6 and 8. Same green / yellow / red scale as the scorecard. "
+        "No soil-pH overlay on this map."
+    )
+
+    # stride 8 ≈ a few dozen points; enough detail without flooding Open-Meteo
+    sample_pts = ph_focus_sample_points(ph_grid, ph_min=6.0, ph_max=8.0, stride=8)
+    if len(sample_pts) > 40:
+        # even spatial thin if still too many
+        step = max(1, len(sample_pts) // 40)
+        sample_pts = sample_pts[::step]
+    if not sample_pts:
+        st.info(
+            "No sample points with pH 6–8 found in the local grid "
+            "(Isle of Man soils are often more acidic). "
+            "Try widening the range if you want more coverage."
+        )
+    else:
+        with st.spinner(f"Scoring {len(sample_pts)} pH 6–8 sample points…"):
+            scored = []
+            for pt in sample_pts:
+                result = score_point_for_growth(pt["lat"], pt["lon"], selected_species)
+                if result.get("score") is None:
+                    continue
+                scored.append({**pt, **result})
+
+        if not scored:
+            st.warning("Could not retrieve weather scores for the sample points right now.")
+        else:
+            gmap = build_growth_conditions_map(scored, zoom=10)
+            st_folium(
+                gmap,
+                width=None,
+                height=480,
+                returned_objects=[],
+                key="iom_growth_conditions_map",
+            )
+            st.markdown(growth_map_legend_html(), unsafe_allow_html=True)
+            n_green = sum(1 for p in scored if p["score"] >= 80)
+            n_amber = sum(1 for p in scored if 50 <= p["score"] < 80)
+            n_red = sum(1 for p in scored if p["score"] < 50)
+            st.caption(
+                f"Sampled **{len(scored)}** points with pH 6–8 · "
+                f"🟢 {n_green} excellent · 🟡 {n_amber} moderate · 🔴 {n_red} poor"
+            )
+
 
 # ==========================================
 # VIEW B: 3-ZONE HEAD-TO-HEAD COMPARISON
