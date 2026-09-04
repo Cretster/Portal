@@ -106,7 +106,7 @@ def ph_legend_html(ph_value=None):
 
 # 1. Species Parameter Matrix
 SPECIES_MATRIX = {
-    "🍄 Field Mushroom (Agaricus campestris)": {
+    "😁 'Field Mushroom' (Agaricus campestris)": {
         "day_min": 8, "day_max": 14,
         "night_min": 5, "night_max": 9,
         "rain_trigger": 12, "frost_kill": True,
