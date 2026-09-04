@@ -405,7 +405,7 @@ st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", la
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
 st.subheader("Then scroll down for probability info below")
-st.caption("🍄 Tip: finish zooming/panning first, then click once to set the pin.")
+st.caption("🍄 Use 🔍+/🔍− for a zoom that stays in place. Mouse-wheel or pinch to zoom is fine for browsing; click once to drop the pin.")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
@@ -417,10 +417,6 @@ if "ph_opacity" not in st.session_state:
     st.session_state.ph_opacity = 0.70
 if "map_initialized" not in st.session_state:
     st.session_state.map_initialized = False
-if "map_ignore_view" not in st.session_state:
-    # After a pin drop / programmatic rebuild, ignore the next few
-    # zoom/center reports so Leaflet init values cannot overwrite the real view.
-    st.session_state.map_ignore_view = 0
 
 ph_grid = load_ph_grid()
 
@@ -491,7 +487,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         )
         display_label = "Map pin"
 
-        # Opacity in sidebar — keeps it off the map so sliding it is deliberate
+        # Opacity in sidebar (deliberate; avoids fighting map clicks)
         st.session_state.ph_opacity = st.sidebar.slider(
             "Soil pH overlay opacity",
             min_value=0.0,
@@ -501,6 +497,25 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             key="ph_opacity_slider",
             help="Drag to fade the pH colour layer in or out.",
         )
+
+        # Explicit zoom controls — these survive pin drops reliably.
+        # (Mouse-wheel zoom is client-side only and is lost on pin remount;
+        #  use these buttons when you want a zoom level that sticks.)
+        zc1, zc2, zc3, zc4 = st.columns(4)
+        with zc1:
+            if st.button("🔍−", help="Zoom out", use_container_width=True):
+                st.session_state.map_view["zoom"] = max(8, int(st.session_state.map_view["zoom"]) - 1)
+                st.session_state.map_initialized = True
+        with zc2:
+            if st.button("Island", help="Whole Isle of Man", use_container_width=True):
+                st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
+                st.session_state.map_initialized = False
+        with zc3:
+            if st.button("🔍+", help="Zoom in", use_container_width=True):
+                st.session_state.map_view["zoom"] = min(16, int(st.session_state.map_view["zoom"]) + 1)
+                st.session_state.map_initialized = True
+        with zc4:
+            st.caption(f"Zoom **{int(st.session_state.map_view['zoom'])}**")
 
         view = st.session_state.map_view
         fit_island = not st.session_state.map_initialized
@@ -512,45 +527,18 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             fit_island=fit_island,
         )
 
+        # ONLY last_clicked — do not return zoom/center.
+        # Returning zoom/center forces a Streamlit rerun on every pan/zoom,
+        # which remounts the map and causes the "2–3 attempts" behaviour.
         map_data = st_folium(
             fmap,
             width=None,
             height=520,
-            returned_objects=["last_clicked", "zoom", "center"],
+            returned_objects=["last_clicked"],
             key="iom_ph_map_stable",
         )
 
-        # --- View tracking with feedback-loop guard ---
-        # After a pin drop the map remounts and Leaflet briefly reports the
-        # *constructor* zoom/centre. Those must not overwrite the real view.
-        if st.session_state.map_ignore_view > 0:
-            st.session_state.map_ignore_view -= 1
-        elif map_data:
-            z = map_data.get("zoom")
-            c = map_data.get("center")
-            if z is not None:
-                try:
-                    z_int = int(round(float(z)))
-                    if z_int != int(st.session_state.map_view["zoom"]):
-                        st.session_state.map_view["zoom"] = z_int
-                        st.session_state.map_initialized = True
-                except (TypeError, ValueError):
-                    pass
-            if c:
-                lat_c = c.get("lat")
-                lon_c = c.get("lng", c.get("lon"))
-                if lat_c is not None and lon_c is not None:
-                    lat_c, lon_c = float(lat_c), float(lon_c)
-                    # Only store meaningful pans (ignore sub-pixel noise)
-                    if (
-                        abs(lat_c - st.session_state.map_view["lat"]) > 0.00015
-                        or abs(lon_c - st.session_state.map_view["lon"]) > 0.00015
-                    ):
-                        st.session_state.map_view["lat"] = lat_c
-                        st.session_state.map_view["lon"] = lon_c
-                        st.session_state.map_initialized = True
-
-        # --- Pin drop: save view from THIS map_data, then ignore next init reports ---
+        # Single-click pin drop
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
@@ -562,52 +550,12 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 or abs(prev["lat"] - lat) > 1e-6
                 or abs(prev["lon"] - lon) > 1e-6
             ):
-                # Capture zoom/centre reported alongside the click (before remount)
-                z = map_data.get("zoom")
-                c = map_data.get("center")
-                if z is not None:
-                    try:
-                        st.session_state.map_view["zoom"] = int(round(float(z)))
-                    except (TypeError, ValueError):
-                        pass
-                if c:
-                    lat_c = c.get("lat")
-                    lon_c = c.get("lng", c.get("lon"))
-                    if lat_c is not None and lon_c is not None:
-                        # Keep the user's pan; do not force-centre on the pin
-                        st.session_state.map_view["lat"] = float(lat_c)
-                        st.session_state.map_view["lon"] = float(lon_c)
-
                 st.session_state.map_click = new_click
+                # Keep current zoom; only nudge centre toward the pin slightly
+                # by storing pin as view centre so remount stays nearby
+                st.session_state.map_view["lat"] = lat
+                st.session_state.map_view["lon"] = lon
                 st.session_state.map_initialized = True
-                # Ignore the next 2 view reports from the remounted map
-                st.session_state.map_ignore_view = 2
-
-        if st.session_state.map_click:
-            lat = st.session_state.map_click["lat"]
-            lon = st.session_state.map_click["lon"]
-            current_ph = st.session_state.map_click.get("ph")
-            if current_ph is None:
-                current_ph = sample_ph(lat, lon, ph_grid)
-                st.session_state.map_click["ph"] = current_ph
-            try:
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {
-                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus,
-                }
-                st.sidebar.success(f"📍 {lat:.5f}, {lon:.5f}")
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-            except Exception as e:
-                location_error = str(e)
-                zone_info = {
-                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": 0,
-                }
 
         # Prominent legend + large pH block under the map
         st.markdown(ph_legend_html(current_ph), unsafe_allow_html=True)
