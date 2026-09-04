@@ -24,7 +24,11 @@ def load_ph_grid():
     for p in candidates:
         if p.exists():
             with p.open() as f:
-                return json.load(f)
+                data = json.load(f)
+            # support either key name from different exports
+            if "ph_grid" not in data and "grid" in data:
+                data["ph_grid"] = data["grid"]
+            return data
     return None
 
 
@@ -35,13 +39,16 @@ def sample_ph(lat, lon, grid_meta):
     west, south = grid_meta["west"], grid_meta["south"]
     east, north = grid_meta["east"], grid_meta["north"]
     width, height = grid_meta["width"], grid_meta["height"]
+    ph_grid = grid_meta.get("ph_grid") or grid_meta.get("grid")
+    if ph_grid is None:
+        return None
     if not (south <= lat <= north and west <= lon <= east):
         return None
     x = int((lon - west) / (east - west) * width)
     y = int((north - lat) / (north - south) * height)
     if x < 0 or x >= width or y < 0 or y >= height:
         return None
-    return grid_meta["ph_grid"][y][x]
+    return ph_grid[y][x]
 
 
 def ph_legend_html(ph_value=None):
@@ -84,7 +91,7 @@ def ph_legend_html(ph_value=None):
         )
     parts.append(
         '<div style="margin-top:10px;font-size:11px;color:#666">'
-        "Model estimates at ~250 m resolution (ISRIC SoilGrids). "
+        "Model estimates at ~250 m resolution (ISRIC SoilGrids), smoothly interpolated for display. "
         "Most of the Isle of Man falls in the acid to near-neutral range.</div>"
     )
     parts.append("</div>")
@@ -93,7 +100,7 @@ def ph_legend_html(ph_value=None):
 
 # 1. Species Parameter Matrix
 SPECIES_MATRIX = {
-    "🍄 'Field Mushroom' (Agaricus campestris) 😀": {
+    "🍄 Field Mushroom (Agaricus campestris)": {
         "day_min": 8, "day_max": 14,
         "night_min": 5, "night_max": 9,
         "rain_trigger": 12, "frost_kill": True,
@@ -339,7 +346,7 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
                            clicked=None, grid_meta=None, opacity=0.7,
                            fit_island=False):
     """
-    Folium map with custom-coloured SoilGrids pH image overlay.
+    Folium map with smoothly upsampled SoilGrids pH image overlay.
     Falls back to ISRIC WMS if the PNG is missing.
     The red pin is always drawn from session state so it survives reruns.
     When fit_island is True (first load only), the view is fitted to IoM bounds;
@@ -407,6 +414,8 @@ if "map_view" not in st.session_state:
     st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
 if "ph_opacity" not in st.session_state:
     st.session_state.ph_opacity = 0.70
+if "map_initialized" not in st.session_state:
+    st.session_state.map_initialized = False
 
 ph_grid = load_ph_grid()
 
@@ -489,8 +498,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         )
 
         view = st.session_state.map_view
-        # Only fit to the whole island on the very first visit (no pin yet, default zoom)
-        fit_island = st.session_state.map_click is None and view["zoom"] <= 10
+        # Fit whole island only on the very first map render
+        fit_island = not st.session_state.map_initialized
 
         fmap = build_clickable_ph_map(
             view["lat"], view["lon"], int(view["zoom"]),
@@ -508,19 +517,31 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             key="iom_ph_map_stable",
         )
 
-        # Remember current zoom / centre whenever the user pans or zooms
+        # Capture user pan/zoom WITHOUT recentering the map on pin clicks
         if map_data:
-            if map_data.get("zoom") is not None:
-                st.session_state.map_view["zoom"] = int(map_data["zoom"])
-            if map_data.get("center"):
-                c = map_data["center"]
+            z = map_data.get("zoom")
+            c = map_data.get("center")
+            if z is not None:
+                try:
+                    z_int = int(z)
+                    if abs(z_int - int(st.session_state.map_view["zoom"])) >= 1:
+                        st.session_state.map_view["zoom"] = z_int
+                        st.session_state.map_initialized = True
+                except (TypeError, ValueError):
+                    pass
+            if c:
                 lat_c = c.get("lat")
                 lon_c = c.get("lng", c.get("lon"))
                 if lat_c is not None and lon_c is not None:
-                    st.session_state.map_view["lat"] = float(lat_c)
-                    st.session_state.map_view["lon"] = float(lon_c)
+                    if (
+                        abs(float(lat_c) - st.session_state.map_view["lat"]) > 1e-5
+                        or abs(float(lon_c) - st.session_state.map_view["lon"]) > 1e-5
+                    ):
+                        st.session_state.map_view["lat"] = float(lat_c)
+                        st.session_state.map_view["lon"] = float(lon_c)
+                        st.session_state.map_initialized = True
 
-        # Only update pin when the user actually clicked a new point
+        # Pin update only — do NOT move map_view centre (keeps zoom/pan stable)
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
@@ -533,9 +554,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 or abs(prev["lon"] - lon) > 1e-6
             ):
                 st.session_state.map_click = new_click
-                # Keep current zoom; update centre to the pin without forcing a zoom reset
-                st.session_state.map_view["lat"] = lat
-                st.session_state.map_view["lon"] = lon
+                st.session_state.map_initialized = True
                 st.rerun()
 
         if st.session_state.map_click:
@@ -593,43 +612,9 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         st.caption(f"**Location:** {zone_info['name']}")
         st.markdown("---")
 
-    st.subheader(f"📈 Recent Weather & Forecast Trend: {display_label}")
-    st.caption(
-        "Use this to line up your own field observations against what the model expected at the time."
-    )
-
-    history_days = st.slider("Days of Weather History to include", 7, 30, 21)
-
-    try:
-        with st.spinner("Loading trend data..."):
-            dates, day_max, night_min, trend_rain = fetch_historical_daily(
-                zone_info["lat"], zone_info["lon"], days_back=history_days
-            )
-
-        daily_scores = []
-        for i in range(len(dates)):
-            rain_48h = trend_rain[i] + (trend_rain[i - 1] if i > 0 else 0)
-            had_frost = night_min[i] <= 0
-            score, _, _, _, _ = calculate_precise_index(
-                day_max[i], night_min[i], rain_48h, had_frost,
-                zone_info["upland_offset"], rules,
-            )
-            daily_scores.append(score)
-
-        fig = build_trend_chart(
-            dates, day_max, night_min, trend_rain, daily_scores, selected_species
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption(
-            "🟢 ≥80% · 🟡 50–79% · 🔴 <50% — the thick line's colour follows the same "
-            "probability model as the scorecard below."
-        )
-
-    except Exception as e:
-        st.error(f"⚠️ Could not load historical trend data ({e}).")
-
-    st.markdown("---")
-
+    # ------------------------------------------------------------------
+    # Live weather + scorecard FIRST (directly under map / pH)
+    # ------------------------------------------------------------------
     left_panel, right_panel = st.columns(2)
 
     with left_panel:
@@ -650,17 +635,17 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
             st.markdown("---")
             st.caption("Override values manually if you want to test hypothetical conditions:")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5)
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5)
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, float(rain), 0.5)
-            frost_input = st.toggle("Active Ground Frost Event?", value=frost_input)
+            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5, key="ov_day")
+            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5, key="ov_night")
+            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, float(rain), 0.5, key="ov_rain")
+            frost_input = st.toggle("Active Ground Frost Event?", value=frost_input, key="ov_frost")
 
         except Exception as e:
             st.error(f"⚠️ Could not fetch live weather data ({e}). Falling back to manual input.")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, 12.0, 0.5)
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, 7.0, 0.5)
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, 15.0, 0.5)
-            frost_input = st.toggle("Active Ground Frost Event?", value=False)
+            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, 12.0, 0.5, key="fb_day")
+            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, 7.0, 0.5, key="fb_night")
+            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, 15.0, 0.5, key="fb_rain")
+            frost_input = st.toggle("Active Ground Frost Event?", value=False, key="fb_frost")
 
     with right_panel:
         st.subheader("🧬 Environmental Factor Scorecard")
@@ -693,6 +678,45 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 f"⛰️ **Upland Grazing Bonus:** +{zone_info['upland_offset'] * 5}% "
                 f"terrain advantage mapping applied to {zone_info['name']}."
             )
+
+    # ------------------------------------------------------------------
+    # Historical trend graph LAST (below scoring)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader(f"📈 Recent Weather & Forecast Trend: {display_label}")
+    st.caption(
+        "Use this to line up your own field observations against what the model expected at the time."
+    )
+
+    history_days = st.slider("Days of Weather History to include", 7, 30, 21, key="hist_days")
+
+    try:
+        with st.spinner("Loading trend data..."):
+            dates, day_max, night_min, trend_rain = fetch_historical_daily(
+                zone_info["lat"], zone_info["lon"], days_back=history_days
+            )
+
+        daily_scores = []
+        for i in range(len(dates)):
+            rain_48h = trend_rain[i] + (trend_rain[i - 1] if i > 0 else 0)
+            had_frost = night_min[i] <= 0
+            score, _, _, _, _ = calculate_precise_index(
+                day_max[i], night_min[i], rain_48h, had_frost,
+                zone_info["upland_offset"], rules,
+            )
+            daily_scores.append(score)
+
+        fig = build_trend_chart(
+            dates, day_max, night_min, trend_rain, daily_scores, selected_species
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "🟢 ≥80% · 🟡 50–79% · 🔴 <50% — the thick line's colour follows the same "
+            "probability model as the scorecard above."
+        )
+
+    except Exception as e:
+        st.error(f"⚠️ Could not load historical trend data ({e}).")
 
 # ==========================================
 # VIEW B: 3-ZONE HEAD-TO-HEAD COMPARISON
