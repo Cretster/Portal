@@ -403,9 +403,9 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
-st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
-st.subheader("Then scroll down for probability info below")
-st.caption("🍄 Use 🔍+/🔍− for a zoom that sticks after pinning. Mouse-wheel zoom is fine for browsing; click once to drop the pin.")
+st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+st.caption("🍄 Click on the map where you want to check growth conditions")
+st.caption("Then scroll down for growth probability info below")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
