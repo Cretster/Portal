@@ -844,11 +844,14 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     # Island growth-conditions map (pH 5–6.5, moderate+ scores only)
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🗺️ Example areas worth checking (moderate–excellent growth odds)")
+    st.subheader("🤔 Example areas maybe worth checking (moderate–excellent growth odds)")
+    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW! 🙄 ***")
+    st.caption("Thankyou for your patience.  Or not - not my issue! 😂😂😂")
     st.caption(
-        "Coloured dots mark sample spots with soil pH 5.0–6.5 **and** a live fruiting "
+        "Coloured dots mark 'some' sample spots with soil pH 5.0–6.5 **and** a live fruiting "
         "probability of 50% or higher (yellow = moderate, green = excellent). "
         "Poor (red) scores are hidden. Same scoring model as the scorecard — no pH overlay."
+        "Obviously there may be many other places where conditions have been suitable but it is only possible to show limited samples"
     )
 
     # Denser sampling (stride 3) for wider coverage; cap API calls sensibly
