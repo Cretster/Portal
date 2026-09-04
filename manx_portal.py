@@ -405,7 +405,7 @@ st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", la
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
 st.subheader("Then scroll down for probability info below")
-st.caption("🍄 Use 🔍+/🔍− for a zoom that stays in place. Mouse-wheel or pinch to zoom is fine for browsing; click once to drop the pin.")
+st.caption("🍄 Use 🔍+/🔍− for a zoom that sticks after pinning. Mouse-wheel zoom is fine for browsing; click once to drop the pin.")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
@@ -551,11 +551,36 @@ if app_mode == "📍 Hyperlocal Focused Zone":
                 or abs(prev["lon"] - lon) > 1e-6
             ):
                 st.session_state.map_click = new_click
-                # Keep current zoom; only nudge centre toward the pin slightly
-                # by storing pin as view centre so remount stays nearby
-                st.session_state.map_view["lat"] = lat
-                st.session_state.map_view["lon"] = lon
+                # Do not rewrite zoom here — session zoom (buttons) is what sticks.
+                # Keep centre as-is so a pin drop does not jump the view more than needed.
                 st.session_state.map_initialized = True
+
+        # Build zone_info from the saved pin so weather/scores render below
+        if st.session_state.map_click:
+            lat = st.session_state.map_click["lat"]
+            lon = st.session_state.map_click["lon"]
+            current_ph = st.session_state.map_click.get("ph")
+            if current_ph is None:
+                current_ph = sample_ph(lat, lon, ph_grid)
+                st.session_state.map_click["ph"] = current_ph
+            try:
+                bonus, elevation = get_elevation_bonus(lat, lon)
+                zone_info = {
+                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": bonus,
+                }
+                st.sidebar.success(f"📍 {lat:.5f}, {lon:.5f}")
+                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
+            except Exception as e:
+                location_error = str(e)
+                zone_info = {
+                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
+                    "lat": lat,
+                    "lon": lon,
+                    "upland_offset": 0,
+                }
 
         # Prominent legend + large pH block under the map
         st.markdown(ph_legend_html(current_ph), unsafe_allow_html=True)
