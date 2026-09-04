@@ -500,19 +500,16 @@ def growth_map_legend_html():
     return (
         '<div style="font-size:13px;line-height:1.5;padding:10px 12px;'
         'background:#f7f9fb;border:1px solid #d0d7de;border-radius:8px;margin-top:8px">'
-        "<b>Growth probability shading</b> (same scale as the scorecard)<br>"
+        "<b>Areas worth checking</b> (score ≥50%, pH 5.0–6.5)<br>"
         '<span style="display:inline-block;width:14px;height:14px;background:#2ecc71;'
         'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
         "🟢 ≥80% excellent &nbsp;&nbsp;"
         '<span style="display:inline-block;width:14px;height:14px;background:#f1c40f;'
         'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
-        "🟡 50–79% moderate &nbsp;&nbsp;"
-        '<span style="display:inline-block;width:14px;height:14px;background:#e74c3c;'
-        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
-        "🔴 &lt;50% poor<br>"
-        '<span style="font-size:11px;color:#666">Only cells with soil pH 6.0–8.0 are shown. '
-        "Colours use live Open-Meteo weather + the same scoring model as above. "
-        "Sampled grid (not every 250 m cell) to keep API use reasonable.</span>"
+        "🟡 50–79% moderate<br>"
+        '<span style="font-size:11px;color:#666">Poor (&lt;50%) samples are hidden. '
+        "Colours use live Open-Meteo weather + the same scoring model as the scorecard. "
+        "Denser sampled grid (not every 250 m cell) for practical API use.</span>"
         "</div>"
     )
 
@@ -844,39 +841,45 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
 
     # ------------------------------------------------------------------
-    # Island growth-conditions map (pH 5–6.5 only, score colours)
+    # Island growth-conditions map (pH 5–6.5, moderate+ scores only)
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🗺️ Island growth conditions (pH 5.0–6.5 zones)")
+    st.subheader("🗺️ Example areas worth checking (moderate–excellent growth odds)")
     st.caption(
-        "Coloured dots show live fruiting-probability scores for areas where soil pH is "
-        "between 5 and 6.5. Same green / yellow / red scale as the scorecard. "
-        "No soil-pH overlay on this map."
+        "Coloured dots mark sample spots with soil pH 5.0–6.5 **and** a live fruiting "
+        "probability of 50% or higher (yellow = moderate, green = excellent). "
+        "Poor (red) scores are hidden. Same scoring model as the scorecard — no pH overlay."
     )
 
-    # stride 8 ≈ a few dozen points; enough detail without flooding Open-Meteo
-    sample_pts = ph_focus_sample_points(ph_grid, ph_min=5.0, ph_max=6.5, stride=8)
-    if len(sample_pts) > 50:
-        # even spatial thin if still too many
-        step = max(1, len(sample_pts) // 50)
+    # Denser sampling (stride 3) for wider coverage; cap API calls sensibly
+    sample_pts = ph_focus_sample_points(ph_grid, ph_min=5.0, ph_max=6.5, stride=3)
+    if len(sample_pts) > 120:
+        step = max(1, len(sample_pts) // 120)
         sample_pts = sample_pts[::step]
     if not sample_pts:
         st.info(
-            "No sample points with pH 5–6.5 found in the local grid "
-            "(Isle of Man soils are often acidic (below 7)). "
-            "Try widening the range if you want more coverage."
+            "No sample points with pH 5–6.5 found in the local grid. "
+            "Try widening the pH range if you want more coverage."
         )
     else:
         with st.spinner(f"Scoring {len(sample_pts)} pH 5–6.5 sample points…"):
             scored = []
             for pt in sample_pts:
                 result = score_point_for_growth(pt["lat"], pt["lon"], selected_species)
-                if result.get("score") is None:
+                score = result.get("score")
+                if score is None:
+                    continue
+                # Only moderate (yellow) and excellent (green)
+                if score < 50:
                     continue
                 scored.append({**pt, **result})
 
         if not scored:
-            st.warning("Could not retrieve weather scores for the sample points right now.")
+            st.info(
+                "No sample points currently score moderate or excellent (50%+). "
+                "Conditions may be poor island-wide for this species right now — "
+                "check again after rain or milder nights."
+            )
         else:
             gmap = build_growth_conditions_map(scored, zoom=10)
             st_folium(
@@ -889,10 +892,9 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             st.markdown(growth_map_legend_html(), unsafe_allow_html=True)
             n_green = sum(1 for p in scored if p["score"] >= 80)
             n_amber = sum(1 for p in scored if 50 <= p["score"] < 80)
-            n_red = sum(1 for p in scored if p["score"] < 50)
             st.caption(
-                f"Sampled **{len(scored)}** points with pH 6–8 · "
-                f"🟢 {n_green} excellent · 🟡 {n_amber} moderate · 🔴 {n_red} poor"
+                f"Showing **{len(scored)}** promising spots (pH 5–6.5, score ≥50%) · "
+                f"🟢 {n_green} excellent · 🟡 {n_amber} moderate"
             )
 
 
