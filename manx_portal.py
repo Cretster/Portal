@@ -202,7 +202,7 @@ def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
             x=[dates[i], dates[i + 1]], y=[scores[i], scores[i + 1]],
             mode="lines", line=dict(color=seg_color, width=6),
             yaxis="y2", showlegend=first_seg,
-            name="Fruiting Probability (%)",
+            name="FRUITING PROBABILITY! (%)",
             legendgroup="probability", hoverinfo="skip",
         ))
         first_seg = False
@@ -397,7 +397,7 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.header("🍄 Zoom/Click on the map where you want to check growth conditions")
-st.subheader("🍄 (Then scroll for probability info below)")
+st.subheader("Then scroll down for probability info below")
 st.caption("🍄 Please note the map glitches a little and may need to click more than once to set location")
 
 if "map_click" not in st.session_state:
@@ -669,7 +669,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             d_temp, n_temp, rain, frost_input, zone_info["upland_offset"], rules
         )
 
-        st.metric(label=f"Fruiting Probability Index for {display_label}", value=f"{prob}%")
+        st.metric(label=f"Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
         st.progress(prob / 100)
         st.markdown(f"### Status: {verdict}")
         st.markdown("---")
