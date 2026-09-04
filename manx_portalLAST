@@ -845,7 +845,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     # ------------------------------------------------------------------
     st.markdown("---")
     st.subheader("🤔 Example areas maybe worth checking (moderate–excellent growth odds)")
-    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW! 🙄 ***")
+    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW (first time then will remain for 30 minutes)! 🙄 ***")
     st.caption("Thankyou for your patience.  Or not - not my issue! 😂😂😂")
     st.caption(
         "Coloured dots mark 'some' sample spots with soil pH 5.0–6.5 **and** a live fruiting "
