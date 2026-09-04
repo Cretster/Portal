@@ -658,7 +658,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
         st.progress(prob / 100)
         st.markdown(f"### NEW Growth Status*: {verdict}")
-        st.metric(label=f"Check Graph below for recent conditions likeliness of existing growth", value=f"{prob}%", border=True)
+        st.subheader("Check Graph below for recent conditions likeliness of existing growth")
         st.markdown("---")
 
         st.markdown("### Score Breakdown")
