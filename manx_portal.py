@@ -1,3 +1,9 @@
+#st.title("🍄 Dr Pablo's Mushroom Magic!")
+#st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+#st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
+#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
+
+
 import streamlit as st
 import requests
 import re
