@@ -853,8 +853,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
     # Denser sampling (stride 3) for wider coverage; cap API calls sensibly
     sample_pts = ph_focus_sample_points(ph_grid, ph_min=5.0, ph_max=6.5, stride=3)
-    if len(sample_pts) > 120:
-        step = max(1, len(sample_pts) // 120)
+    if len(sample_pts) > 80:
+        step = max(1, len(sample_pts) // 80)
         sample_pts = sample_pts[::step]
     if not sample_pts:
         st.info(
