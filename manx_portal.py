@@ -408,10 +408,10 @@ def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
 
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's Mushroom Magic!")
-st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
-st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
-st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
+#st.title("🍄 Dr Pablo's Mushroom Magic!")
+#st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+#st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
+#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 if "map_click" not in st.session_state:
     st.session_state.map_click = None  # {"lat", "lon", "ph"}
@@ -422,6 +422,10 @@ if "ph_opacity" not in st.session_state:
     st.session_state.ph_opacity = 0.70
 if "map_initialized" not in st.session_state:
     st.session_state.map_initialized = False
+if "map_version" not in st.session_state:
+    st.session_state.map_version = 0
+if "handled_click_id" not in st.session_state:
+    st.session_state.handled_click_id = None
 
 ph_grid = load_ph_grid()
 
@@ -535,32 +539,33 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         # ONLY last_clicked — do not return zoom/center.
         # Returning zoom/center forces a Streamlit rerun on every pan/zoom,
         # which remounts the map and causes the "2–3 attempts" behaviour.
+        # key includes map_version so each new pin gets a fresh Leaflet instance.
+        # That clears sticky last_clicked from the previous pin (which otherwise
+        # makes the next pin need a dummy click + tiny mouse move).
         map_data = st_folium(
             fmap,
             width=None,
             height=520,
             returned_objects=["last_clicked"],
-            key="iom_ph_map_stable",
+            key=f"iom_ph_map_v{st.session_state.map_version}",
         )
 
         # Single-click pin drop
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
-            ph = sample_ph(lat, lon, ph_grid)
-            new_click = {"lat": lat, "lon": lon, "ph": ph}
-            prev = st.session_state.map_click
-            if (
-                prev is None
-                or abs(prev["lat"] - lat) > 1e-6
-                or abs(prev["lon"] - lon) > 1e-6
-            ):
-                st.session_state.map_click = new_click
-                # Centre on the pin so it stays on-screen after remount.
-                # Keep the current (button) zoom so the level does not reset.
+            click_id = (round(lat, 5), round(lon, 5))
+            # Ignore the same last_clicked if we already handled it (sticky value
+            # after remount). Only act on a genuinely new click position.
+            if st.session_state.handled_click_id != click_id:
+                ph = sample_ph(lat, lon, ph_grid)
+                st.session_state.map_click = {"lat": lat, "lon": lon, "ph": ph}
                 st.session_state.map_view["lat"] = lat
                 st.session_state.map_view["lon"] = lon
                 st.session_state.map_initialized = True
+                st.session_state.handled_click_id = click_id
+                st.session_state.map_version += 1
+                st.rerun()
 
         # Build zone_info from the saved pin so weather/scores render below
         if st.session_state.map_click:
