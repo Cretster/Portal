@@ -509,7 +509,9 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             fit_island=fit_island,
         )
 
-        # Stable key; request zoom + centre so we can preserve the user's view
+        # Return zoom/center so we can SAVE the user's view when they click.
+        # (Pan still updates these; we write them into session_state so a pin
+        # drop rebuilds at the same zoom instead of the default.)
         map_data = st_folium(
             fmap,
             width=None,
@@ -518,31 +520,26 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             key="iom_ph_map_stable",
         )
 
-        # Capture user pan/zoom WITHOUT recentering the map on pin clicks
+        # Persist current view whenever Leaflet reports it
         if map_data:
             z = map_data.get("zoom")
             c = map_data.get("center")
             if z is not None:
                 try:
-                    z_int = int(z)
-                    if abs(z_int - int(st.session_state.map_view["zoom"])) >= 1:
-                        st.session_state.map_view["zoom"] = z_int
-                        st.session_state.map_initialized = True
+                    z_int = int(round(float(z)))
+                    st.session_state.map_view["zoom"] = z_int
+                    st.session_state.map_initialized = True
                 except (TypeError, ValueError):
                     pass
             if c:
                 lat_c = c.get("lat")
                 lon_c = c.get("lng", c.get("lon"))
                 if lat_c is not None and lon_c is not None:
-                    if (
-                        abs(float(lat_c) - st.session_state.map_view["lat"]) > 1e-5
-                        or abs(float(lon_c) - st.session_state.map_view["lon"]) > 1e-5
-                    ):
-                        st.session_state.map_view["lat"] = float(lat_c)
-                        st.session_state.map_view["lon"] = float(lon_c)
-                        st.session_state.map_initialized = True
+                    st.session_state.map_view["lat"] = float(lat_c)
+                    st.session_state.map_view["lon"] = float(lon_c)
+                    st.session_state.map_initialized = True
 
-        # Pin update only — do NOT move map_view centre (keeps zoom/pan stable)
+        # Pin update — view (zoom/centre) already saved above from the same map_data
         if map_data and map_data.get("last_clicked"):
             lat = float(map_data["last_clicked"]["lat"])
             lon = float(map_data["last_clicked"]["lng"])
@@ -556,7 +553,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
             ):
                 st.session_state.map_click = new_click
                 st.session_state.map_initialized = True
-                st.rerun()
+                # Do NOT call st.rerun() — avoids a double remount that resets zoom.
+                # Streamlit will rerun once after session_state is written.
 
         if st.session_state.map_click:
             lat = st.session_state.map_click["lat"]
