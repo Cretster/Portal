@@ -48,9 +48,9 @@ def ph_legend_html(ph_value=None):
     """Prominent legend + large pH readout for the selected point."""
     rows = [
         ("#d73027", "< 5.0", "ACIEEEEED!!!"),
-        ("#fc8d59", "5.0 – 5.5", "Moderately acid"),
-        ("#fee08b", "5.5 – 6.0", "Slightly acid (possibly optimal)"),
-        ("#d9ef8b", "6.0 – 6.5", "Near-neutral (possibly optimal)"),
+        ("#fc8d59", "5.0 – 5.5", "Moderately acid (near optimal)"),
+        ("#fee08b", "5.5 – 6.0", "Slightly acid (GREAT!)"),
+        ("#d9ef8b", "6.0 – 6.5", "Near-neutral (near optimal)"),
         ("#91cf60", "6.5 – 7.0", "Slightly alkaline (like Duracell)"),
         ("#1a9850", "> 7.0", "Alkaline (like bleach)"),
     ]
