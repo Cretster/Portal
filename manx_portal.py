@@ -844,30 +844,30 @@ if app_mode == "📍 Hyperlocal Focused Zone":
 
 
     # ------------------------------------------------------------------
-    # Island growth-conditions map (pH 6–8 only, score colours)
+    # Island growth-conditions map (pH 5–6.5 only, score colours)
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🗺️ Island growth conditions (pH 6.0–8.0 zones)")
+    st.subheader("🗺️ Island growth conditions (pH 5.0–6.5 zones)")
     st.caption(
         "Coloured dots show live fruiting-probability scores for areas where soil pH is "
-        "between 6 and 8. Same green / yellow / red scale as the scorecard. "
+        "between 5 and 6.5. Same green / yellow / red scale as the scorecard. "
         "No soil-pH overlay on this map."
     )
 
     # stride 8 ≈ a few dozen points; enough detail without flooding Open-Meteo
-    sample_pts = ph_focus_sample_points(ph_grid, ph_min=6.0, ph_max=8.0, stride=8)
-    if len(sample_pts) > 40:
+    sample_pts = ph_focus_sample_points(ph_grid, ph_min=5.0, ph_max=6.5, stride=8)
+    if len(sample_pts) > 50:
         # even spatial thin if still too many
-        step = max(1, len(sample_pts) // 40)
+        step = max(1, len(sample_pts) // 50)
         sample_pts = sample_pts[::step]
     if not sample_pts:
         st.info(
-            "No sample points with pH 6–8 found in the local grid "
-            "(Isle of Man soils are often more acidic). "
+            "No sample points with pH 5–6.5 found in the local grid "
+            "(Isle of Man soils are often acidic (below 7)). "
             "Try widening the range if you want more coverage."
         )
     else:
-        with st.spinner(f"Scoring {len(sample_pts)} pH 6–8 sample points…"):
+        with st.spinner(f"Scoring {len(sample_pts)} pH 5–6.5 sample points…"):
             scored = []
             for pt in sample_pts:
                 result = score_point_for_growth(pt["lat"], pt["lon"], selected_species)
