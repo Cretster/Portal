@@ -518,7 +518,7 @@ def growth_map_legend_html():
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
 st.caption("Welcome to Dr Pablo's mushroom growth probability page.  We here at Dr Pablo industries recognise that these tasty natural treats can be sometimes be a touch elusive so this page can help you check weather patterns that are likely to stimulate their growth.")
-with st.container(gap=3):
+with st.container(gap=1):
     st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
     st.text("2) Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH")
     st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time")
