@@ -1,7 +1,7 @@
 #st.title("🍄 Dr Pablo's Mushroom Magic!")
 #st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 #st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
-#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
+#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down.  Yes I know the big squares of colour are a bit wank looking, but what do you want?   A fucking refund? 🤣🖕")
 
 
 import streamlit as st
@@ -305,7 +305,7 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
     elif total_score >= 50:
         verdict = "🟨 MODERATE: Sporadic growth possible. Check damp, unfertilized slopes."
     else:
-        verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe growth right now."
+        verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe NEW growth right now.  Check the graph for recent conditions and likeliness of recent growth."
 
     return total_score, verdict, day_score, night_score, rain_score
 
@@ -513,11 +513,25 @@ def growth_map_legend_html():
         "</div>"
     )
 
-
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
-st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
+st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.")
+st.markdown("**HOW TO USE:**")
+with st.container(gap=1):
+    st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
+    st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH for that spot.")
+    st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time and their difference etc.")
+    st.text("4  This indicates the chance of growth for that location, as long as the pH value of the soil is ideal for the species you want to look for.")
+    st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear trend, including a few days aheasd.")
+    st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
+    st.text("7: Nothing.")
+    st.text("8- Finally there is a second map which shows random samples of places which currently have a moderate to high chance of growth at the moment.")
+    st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
+st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
+           
+st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
@@ -805,7 +819,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     # ------------------------------------------------------------------
     st.markdown("---")
     st.subheader(f"📈 Recent Weather & Forecast Trend: {display_label}")
-    st.caption(
+    st.text(
         "Use this to line up your own field observations against what the model expected at the time."
     )
 
@@ -844,8 +858,8 @@ if app_mode == "📍 Hyperlocal Focused Zone":
     # Island growth-conditions map (pH 5–6.5, moderate+ scores only)
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🤔 Example areas maybe worth checking (moderate–excellent growth odds)")
-    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW (first time then will remain for 30 minutes)! 🙄 ***")
+    st.subheader("🤔 Example areas maybe worth checking out (moderate–excellent growth odds)")
+    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW (first time then will remain like this for 30 minutes)! 🙄 ***")
     st.caption("Thankyou for your patience.  Or not - not my issue! 😂😂😂")
     st.caption(
         "Coloured dots mark 'some' sample spots with soil pH 5.0–6.5 **and** a live fruiting "
