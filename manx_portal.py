@@ -1,7 +1,7 @@
 #st.title("🍄 Dr Pablo's Mushroom Magic!")
 #st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 #st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
-#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
+#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down.  Yes I know the big squares of colour are a bit wank looking, but what do you want?   A fucking refund? 🤣🖕")
 
 
 import streamlit as st
@@ -529,7 +529,7 @@ with st.container(gap=1):
     st.text("7: Nothing.")
     st.text("8- Finally there is a second map which shows random samples of places which currently have a moderate to high chance of growth at the moment.")
     st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
-st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.")
+st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@gmail.com")
            
 st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
