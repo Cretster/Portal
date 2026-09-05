@@ -305,7 +305,7 @@ def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus
     elif total_score >= 50:
         verdict = "🟨 MODERATE: Sporadic growth possible. Check damp, unfertilized slopes."
     else:
-        verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe growth right now."
+        verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe NEW growth right now.  Check the graph for recent conditions and likeliness of recent growth."
 
     return total_score, verdict, day_score, night_score, rain_score
 
@@ -513,11 +513,10 @@ def growth_map_legend_html():
         "</div>"
     )
 
-
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
-st.caption("Welcome to Dr Pablo's mushroom growth probability page.  We here at Dr Pablo industries recognise that these tasty natural treats can be sometimes be a touch elusive so this page can help you check weather patterns that are likely to stimulate their growth.")
+st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
 with st.container(gap=1):
     st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
     st.text("2) Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH")
