@@ -517,6 +517,8 @@ def growth_map_legend_html():
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
+st.caption("Welcome to Dr Pablo's mushroom growth probability page.  We here at Dr Pablo industries recognise that these tasty natural treats can be sometimes be a touch elusive so this page can help you check weather patterns that are likely to stimulate their growth.")
+
 st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
