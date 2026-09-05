@@ -516,12 +516,12 @@ def growth_map_legend_html():
 # --- FRONTEND ---
 st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
 st.title("🍄 Dr Pablo's Mushroom Magic!")
-st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
+st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
 #st.text("HOW TO USE:")
 st.markdown("**HOW TO USE:**")
 with st.container(gap=1):
     st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
-    st.text("2) Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH")
+    st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH")
     st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time")
     st.text("4  This indicates the chance of growth for that location as long as the pH value of the soil is ideal")
     st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear fashion")
@@ -529,10 +529,8 @@ with st.container(gap=1):
     st.text("8: in that location and may still be found etc.")
     st.text("7- Finally there is a second map which shows random samples of places which currently have a moderate to high chance of growth at the moment.")
 st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.")
-#st.caption("Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.")
-
            
-st.subheader("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
 st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
