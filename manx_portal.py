@@ -526,8 +526,8 @@ st.caption("You can see also historical weather data (and adjust the number of d
 st.caption("So that you can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely")
 st.caption("in that location and may still be found etc.")
 st.caption("Finally there is a second map which shows random samples of places which currently have a moderate to high chance of growth at the moment.")
-st.caption(:red["Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards"])
-st.caption(:red["Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy."])
+st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards)
+st.caption("Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.")
 
            
 st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
