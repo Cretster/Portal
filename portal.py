@@ -112,20 +112,27 @@ def ph_legend_html(ph_value=None):
 # API Data Fetching (Rebuilt with Lagged Parameters)
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
-def fetch_live_weather(lat, lon):
-    """Fetches real-time snapshots alongside historical context to generate lag weights."""
-    url = "https://open-meteo.com"
+@st.cache_data(ttl=1800)
+@st.cache_data(ttl=1800)
+def fetch_historical_daily(lat, lon, days_back=7):
+    url = "https://api.open-meteo.com/v1/forecast"
+    
+    # FIX: Keep params strictly limited to what Open-Meteo expects
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m,precipitation,relative_humidity_2m,wind_speed_10m",
-        "past_days": 5, 
-        "forecast_days": 1,
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "hourly": "relative_humidity_2m,wind_speed_10m",
+        "past_days": int(days_back),
+        "forecast_days": 3,
         "timezone": "auto",
     }
+    
     resp = requests.get(url, params=params, timeout=10)
     resp.raise_for_status()
-    data = resp.json()
+    raw = resp.json()
+
+
 
     hourly = data["hourly"]
     temps = hourly["temperature_2m"]
