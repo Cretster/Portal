@@ -290,8 +290,8 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
     
     # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
     fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ ACTIVE NEW ERUPTION %", line=dict(color="#e74c3c", width=3, dash="dot"), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 LINGERING FIELD PRESENCE %", line=dict(color="#2ecc71", width=4), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ NEW GROWTH HAPPENING %", line=dict(color="#e74c3c", width=4, dash="dot"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 PREVIOUS GROWTH PRESENT %", line=dict(color="#2ecc71", width=4), yaxis="y2"))
     fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="💧 Avg Air Humidity (%)", line=dict(color="#1abc9c", width=1.5, dash="dash"), yaxis="y2"))
     
     # 3. Tertiary Right Axis: Wind Speed (knots)
