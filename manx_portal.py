@@ -823,7 +823,7 @@ if app_mode == "📍 Hyperlocal Focused Zone":
         "Use this to line up your own field observations against what the model expected at the time."
     )
 
-    history_days = st.slider("Days of Weather History to include", 7, 30, 21, key="hist_days")
+    history_days = st.slider("Days of Weather History to include", 7, 30, 7, key="hist_days")
 
     try:
         with st.spinner("Loading trend data..."):
