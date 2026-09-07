@@ -168,7 +168,7 @@ def fetch_live_weather(lat, lon):
 
 
 @st.cache_data(ttl=1800)
-def fetch_historical_daily(lat, lon, days_back=21, days_forward=5):
+def fetch_historical_daily(lat, lon, days_back=7, days_forward=3):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
