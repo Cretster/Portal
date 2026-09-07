@@ -21,7 +21,7 @@ SPECIES_MATRIX = {
         "frost_kill": True,
         "preferred_ph_min": 6.5, "preferred_ph_max": 7.5,
         "wind_tolerance": 22.0,     # Thick meatier caps withstand wind up to ~25mph
-        "fruiting_months": (Aug, Sept, Oct), # Aug, Sept, Oct
+        "fruiting_months": (8, 9, 10), # Aug, Sept, Oct
         "decay_days": 5             # Thicker flesh lasts longer in field
     },
     "🍄 'Liberty Cap' (Psilocybe semilanceata)": {
@@ -31,7 +31,7 @@ SPECIES_MATRIX = {
         "frost_kill": True,
         "preferred_ph_min": 5.0, "preferred_ph_max": 6.5,
         "wind_tolerance": 13.0,     # Thin stems/caps dry out easily; vulnerable to wind
-        "fruiting_months": (Aug, Sept, Oct, Nov, Dec), # Sept, Oct, Nov, Dec
+        "fruiting_months": (8, 9, 10, 11, 12), # Aug, Sept, Oct, Nov, Dec
         "decay_days": 3             # Thin hygrophanous caps decay rapidly
     }
 }
