@@ -303,7 +303,7 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
         yaxis=dict(title="Temperature Range (°C)", side="left"),
         yaxis2=dict(
             title="Probability / Moisture Volume Index (%) / Rain (mm)",
-            overlaying="y", side="right", range=
+            overlaying="y", side="right", range=[0, 100]
         ),
         yaxis3=dict(
             title="Wind Velocity (knots)",
