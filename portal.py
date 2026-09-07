@@ -322,7 +322,7 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
     fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="<b>💨 Peak Wind (knots)</b>", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
 
     fig.update_layout(
-        title=f"Advanced Multi-Axis Biological Growth Mapping — {species_name}",
+        title=f"Growth Mapping Trends.  The main green and dotted red lines are the ones to focus on for showing growth chances ~— {species_name}",
         xaxis=dict(title="Timeline Window", domain=[0, 0.85]),
         yaxis=dict(title="Temperature Range (°C)", side="left"),
         yaxis2=dict(
