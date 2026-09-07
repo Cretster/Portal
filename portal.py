@@ -400,7 +400,7 @@ def build_growth_conditions_map(points_with_scores, zoom=10):
 # 6. Streamlit Frontend Mounting
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Dr Pablo's Mushroom Logic Model", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's Mushroom Magic Engine")
+st.title("🍄 Dr Pablo's Mushroom Magic")
 st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 
 if "map_click" not in st.session_state: st.session_state.map_click = None
@@ -513,7 +513,7 @@ try:
         historical_presence_stream, h_rh, h_wind, selected_species
     )
     st.plotly_chart(trend_chart, use_container_width=True)
-    st.info("💡 **How to interpret the trend chart:** The dotted Red line shows spikes when conditions were perfect for *new* growth. The solid Green line indicates field presence; notice how it lingers and drops slowly over a few days even after the weather shifts.")
+    st.info("💡 **How to interpret the trend chart:** The dotted Red line shows spikes when conditions were perfect for *new* growth. The solid Green line indicates field presence; notice how it lingers and drops slowly over a few days even after the weather shifts.  Click on any line name in the Key to hide/unhide the line.  Double click them to hide/unhide all other lines.")
 except Exception as e:
     st.error(f"Could not build integrated visual model timelines: {e}")
 
