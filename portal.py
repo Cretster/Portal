@@ -314,9 +314,9 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
     
     # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
     fig.add_trace(go.Bar(x=dates, y=rain, name="<b>Daily Rain (mm)</b>", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="<b>⚡ ACTIVE NEW GROWTH %</b>", line=dict(color="#e74c3c", width=7, dash="dot"), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="<b>🍄 EXISTING GROWTH FIND %</b>", line=dict(color="#2ecc71", width=7), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="<b>💧 Avg Air Humidity (%)</b>", line=dict(color="#1abc9c", width=4, dash="dash"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="<b>⚡ ACTIVE NEW GROWTH %</b>", line=dict(color="#e74c3c", width=9, dash="dot"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="<b>🍄 EXISTING GROWTH FIND %</b>", line=dict(color="#2ecc71", width=9), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="<b>💧 Avg Air Humidity (%)</b>", line=dict(color="#1abc9c", width=6, dash="dash"), yaxis="y2"))
     
     # 3. Tertiary Right Axis: Wind Speed (knots)
     fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="<b>💨 Peak Wind (knots)</b>", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
