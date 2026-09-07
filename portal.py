@@ -269,15 +269,39 @@ def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_r
     return final_growth_score, breakdown, verdict
 
 def generate_decayed_presence_array(growth_scores, decay_span):
-    presence_scores = []
-    current_presence = 0
-    for g_score in growth_scores:
-        if g_score > current_presence:
-            current_presence = g_score
-        else:
-            current_presence = max(0, current_presence - (100 / decay_span))
-        presence_scores.append(int(current_presence))
+    """Models a time-lagged, decaying persistence index where field presence 
+
+    peaks 1-2 days after an eruption event and decays gradually.
+    """
+    total_days = len(growth_scores)
+    presence_scores = [0] * total_days
+    
+    # Loop through timeline to compute the lagged development index
+    for i in range(total_days):
+        # Scan backward over the last 2 days to check for an eruption trigger window
+        possible_peaks = []
+        
+        # Check if an eruption happened 1 day ago (Mushrooms are half size / button stage)
+        if i >= 1:
+            possible_peaks.append(int(growth_scores[i-1] * 0.75))
+            
+        # Check if an eruption happened 2 days ago (Mushrooms are full size / peak abundance)
+        if i >= 2:
+            possible_peaks.append(int(growth_scores[i-2]))
+            
+        # Find the highest shifted value derived from recent weather triggers
+        implied_peak = max(possible_peaks) if possible_peaks else 0
+        
+        # Let previous day's presence decay naturally according to species lifespan
+        previous_presence = presence_scores[i-1] if i > 0 else 0
+        decay_step = 100 / decay_span
+        natural_decay = max(0, previous_presence - decay_step)
+        
+        # Current day score is either the new mature arrivals or the old decaying ones
+        presence_scores[i] = int(max(implied_peak, natural_decay))
+        
     return presence_scores
+
 # ---------------------------------------------------------------------------
 # 5. Mapping and Layout Setup
 # ---------------------------------------------------------------------------
@@ -285,17 +309,17 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
     fig = go.Figure()
     
     # 1. Primary Left Axis: Temperatures (°C)
-    fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)", line=dict(color="#e67e22", width=1.5)))
-    fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)", line=dict(color="#3498db", width=1.5)))
+    fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="<b>Day Temp Max (°C)</b>", line=dict(color="#e67e22", width=1.5)))
+    fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="<b>Night Temp Min (°C)</b>", line=dict(color="#3498db", width=1.5)))
     
     # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
-    fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ NEW GROWTH HAPPENING %", line=dict(color="#e74c3c", width=5, dash="dot"), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 PREVIOUS GROWTH PRESENT %", line=dict(color="#2ecc71", width=5), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="💧 Avg Air Humidity (%)", line=dict(color="#1abc9c", width=4, dash="dash"), yaxis="y2"))
+    fig.add_trace(go.Bar(x=dates, y=rain, name="<b>Daily Rain (mm)</b>", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="<b>⚡ ACTIVE NEW ERUPTION %</b>", line=dict(color="#e74c3c", width=3, dash="dot"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="<b>🍄 LINGERING FIELD PRESENCE %</b>", line=dict(color="#2ecc71", width=4), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="<b>💧 Avg Air Humidity (%)</b>", line=dict(color="#1abc9c", width=1.5, dash="dash"), yaxis="y2"))
     
     # 3. Tertiary Right Axis: Wind Speed (knots)
-    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="💨 Peak Wind (knots)", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
+    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="<b>💨 Peak Wind (knots)</b>", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
 
     fig.update_layout(
         title=f"Advanced Multi-Axis Biological Growth Mapping — {species_name}",
@@ -303,7 +327,7 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
         yaxis=dict(title="Temperature Range (°C)", side="left"),
         yaxis2=dict(
             title="Probability / Moisture Volume Index (%) / Rain (mm)",
-            overlaying="y", side="right", range=[0, 100]
+            overlaying="y", side="right", range=[0, 105]
         ),
         yaxis3=dict(
             title="Wind Velocity (knots)",
@@ -314,6 +338,7 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
         height=550,
     )
     return fig
+
 
 
 def find_overlay_png():
