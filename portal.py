@@ -281,26 +281,40 @@ def generate_decayed_presence_array(growth_scores, decay_span):
 # ---------------------------------------------------------------------------
 # 5. Mapping and Layout Setup
 # ---------------------------------------------------------------------------
-def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presence_array, species_name):
+def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presence_array, rh_avg, wind_max, species_name):
     fig = go.Figure()
     
+    # 1. Primary Left Axis: Temperatures (°C)
     fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)", line=dict(color="#e67e22", width=1.5)))
     fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)", line=dict(color="#3498db", width=1.5)))
-    fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.4)", yaxis="y2"))
-
+    
+    # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
+    fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
     fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ ACTIVE NEW ERUPTION %", line=dict(color="#e74c3c", width=3, dash="dot"), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 LINGERING FIELD PRESENCE %", line=dict(color="#2ecc71", width=5), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 LINGERING FIELD PRESENCE %", line=dict(color="#2ecc71", width=4), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="💧 Avg Air Humidity (%)", line=dict(color="#1abc9c", width=1.5, dash="dash"), yaxis="y2"))
+    
+    # 3. Tertiary Right Axis: Wind Speed (knots)
+    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="💨 Peak Wind (knots)", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
 
     fig.update_layout(
-        title=f"Advanced 10-Day Lagged Algorithm Mapping — {species_name}",
-        xaxis=dict(title="Timeline Window"),
-        yaxis=dict(title="Temperature Range (°C)"),
-        yaxis2=dict(title="Probability & Volume Index (%) / Rain (mm)", overlaying="y", side="right", range=[0, 105]),
+        title=f"Advanced Multi-Axis Biological Growth Mapping — {species_name}",
+        xaxis=dict(title="Timeline Window", domain=[0, 0.85]),
+        yaxis=dict(title="Temperature Range (°C)", side="left"),
+        yaxis2=dict(
+            title="Probability / Moisture Volume Index (%) / Rain (mm)",
+            overlaying="y", side="right", range=
+        ),
+        yaxis3=dict(
+            title="Wind Velocity (knots)",
+            overlaying="y", side="right", anchor="free", position=0.93
+        ),
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        height=500,
+        height=550,
     )
     return fig
+
 
 def find_overlay_png():
     candidates = [Path(__file__).parent / "iom_ph_overlay.png", Path("iom_ph_overlay.png"), Path("/mount/src/portal/iom_ph_overlay.png")]
@@ -468,11 +482,16 @@ try:
         
     historical_presence_stream = generate_decayed_presence_array(historical_growth_stream, rules["decay_days"])
     
-    trend_chart = build_dual_trend_chart(dates, h_day, h_night, h_rain, historical_growth_stream, historical_presence_stream, selected_species)
+    # Clean injection passing humidity and wind variables to the chart trace
+    trend_chart = build_dual_trend_chart(
+        dates, h_day, h_night, h_rain, historical_growth_stream, 
+        historical_presence_stream, h_rh, h_wind, selected_species
+    )
     st.plotly_chart(trend_chart, use_container_width=True)
     st.info("💡 **How to interpret the trend chart:** The dotted Red line shows spikes when conditions were perfect for *new* growth. The solid Green line indicates field presence; notice how it lingers and drops slowly over a few days even after the weather shifts.")
 except Exception as e:
     st.error(f"Could not build integrated visual model timelines: {e}")
+
 
 # ---------------------------------------------------------------------------
 # 8. Regional Discovery Macro Scanning Engine
