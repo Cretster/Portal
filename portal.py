@@ -162,19 +162,29 @@ def fetch_live_weather(lat, lon):
     }
 
 @st.cache_data(ttl=1800)
+@st.cache_data(ttl=1800)
 def fetch_historical_daily(lat, lon, days_back=7):
-    url = "https://open-meteo.com"
+    url = "https://api.open-meteo.com/v1/forecast"
+    
+    # Force clean data conversion so Open-Meteo doesn't throw a string error
+    clean_days = int(days_back)
+    
     params = {
-        "latitude": lat,
-        "longitude": lon,
+        "latitude": float(lat),
+        "longitude": float(lon),
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
         "hourly": "relative_humidity_2m,wind_speed_10m",
-        "past_days": int(days_back),
+        "past_days": clean_days,
         "forecast_days": 3,
         "timezone": "auto",
     }
+    
     resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
+    
+    # Catch any server errors immediately to prevent JSON crashing
+    if resp.status_code != 200:
+        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}")
+        
     raw = resp.json()
     daily = raw["daily"]
     
@@ -195,6 +205,7 @@ def fetch_historical_daily(lat, lon, days_back=7):
         daily_wind_max.append(max(wind_sub) if wind_sub else 5.0)
 
     return daily["time"], daily["temperature_2m_max"], daily["temperature_2m_min"], daily["precipitation_sum"], daily_rh_avg, daily_wind_max
+
 
 @st.cache_data(ttl=86400)
 def get_elevation_bonus(lat, lon):
