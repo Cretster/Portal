@@ -436,8 +436,70 @@ def build_growth_conditions_map(points_with_scores, zoom=10):
 # 6. Streamlit Frontend Mounting
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Dr Pablo's Mushroom Logic Model", page_icon="🍄", layout="wide")
+
+if "boom_trigger" not in st.session_state:
+    st.session_state.boom_trigger = 0
+
 st.title("🍄 Dr Pablo's Mushroom Magic")
 st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
+
+# ACME-style cartoon bomb easter egg (triggered from the 💣 button in the sidebar)
+if st.session_state.boom_trigger > 0:
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <div id="acme-boom-root" style="position:fixed;top:0;left:0;width:100vw;height:100vh;
+             display:flex;align-items:center;justify-content:center;z-index:99999;
+             pointer-events:none;background:rgba(0,0,0,0.25);">
+          <div id="acme-bomb" style="font-size:96px;position:relative;animation:fizz 1.7s ease-in forwards;
+               filter:drop-shadow(0 8px 16px rgba(0,0,0,0.35));">
+            💣
+            <div style="position:absolute;top:-22px;left:60%;font-size:26px;
+                 animation:spark 0.22s linear infinite;">✨</div>
+          </div>
+          <div id="acme-explode" style="font-size:140px;position:absolute;opacity:0;
+               animation:boom 1.0s ease-out 1.6s forwards;">💥</div>
+          <div style="position:absolute;bottom:18%;left:50%;transform:translateX(-50%);
+               font-family:Comic Sans MS, cursive, sans-serif;font-size:28px;font-weight:bold;
+               color:#fff;text-shadow:2px 2px 0 #000;opacity:0;animation:label 0.6s ease-out 1.7s forwards;">
+            KABOOM!
+          </div>
+        </div>
+        <style>
+          @keyframes fizz {
+            0%   { transform: scale(1) rotate(0deg); }
+            25%  { transform: scale(1.1) rotate(-10deg); }
+            50%  { transform: scale(1.2) rotate(8deg); }
+            75%  { transform: scale(1.35) rotate(-4deg); }
+            100% { transform: scale(1.5) rotate(0deg); opacity:0; }
+          }
+          @keyframes spark {
+            0%   { opacity:1; transform: scale(1) translateY(0); }
+            100% { opacity:0.2; transform: scale(1.5) translateY(-8px); }
+          }
+          @keyframes boom {
+            0%   { opacity:0; transform: scale(0.2); }
+            25%  { opacity:1; transform: scale(1.8); }
+            100% { opacity:0; transform: scale(2.6); }
+          }
+          @keyframes label {
+            0%   { opacity:0; transform: translateX(-50%) scale(0.5); }
+            40%  { opacity:1; transform: translateX(-50%) scale(1.2); }
+            100% { opacity:0; transform: translateX(-50%) scale(1); }
+          }
+        </style>
+        <script>
+          setTimeout(function() {
+            var root = document.getElementById('acme-boom-root');
+            if (root) root.style.display = 'none';
+          }, 3000);
+        </script>
+        """,
+        height=120,
+        scrolling=False,
+    )
+    # Reset so it only plays once per click
+    st.session_state.boom_trigger = 0
 
 if "map_click" not in st.session_state: st.session_state.map_click = None
 if "map_view" not in st.session_state: st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
@@ -463,6 +525,11 @@ st.session_state.ph_opacity = st.sidebar.slider(
     "Soil pH overlay opacity", min_value=0.0, max_value=1.0,
     value=float(st.session_state.ph_opacity), step=0.05
 )
+
+# --- tiny ACME bomb easter egg ---
+if st.sidebar.button("💣", help="Do not press"):
+    st.session_state.boom_trigger += 1
+    st.rerun()
 
 # Render Map Canvas Focus Tweaks Controls
 zc1, zc2, zc3, zc4 = st.columns(4)
@@ -546,11 +613,26 @@ try:
         
     historical_presence_stream = generate_decayed_presence_array(historical_growth_stream, rules["decay_days"])
     
-    # Authoritative "today" values taken from the same series the chart uses
-    # (last point = most recent day in the returned timeline)
-    st.session_state["today_new_growth"] = int(historical_growth_stream[-1]) if historical_growth_stream else 0
-    st.session_state["today_existing_presence"] = int(historical_presence_stream[-1]) if historical_presence_stream else 0
-    st.session_state["today_date_label"] = dates[-1] if dates else "today"
+    # Find the index that corresponds to *today* (not a future forecast day)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_idx = None
+    for i, d in enumerate(dates):
+        # dates come as "YYYY-MM-DD"
+        if str(d)[:10] == today_str:
+            today_idx = i
+            break
+    # Fallback: if exact today is missing, take the last non-future day
+    if today_idx is None:
+        for i in range(len(dates) - 1, -1, -1):
+            if str(dates[i])[:10] <= today_str:
+                today_idx = i
+                break
+    if today_idx is None:
+        today_idx = max(0, len(dates) - 4)  # safety: avoid pure forecast end
+
+    st.session_state["today_new_growth"] = int(historical_growth_stream[today_idx])
+    st.session_state["today_existing_presence"] = int(historical_presence_stream[today_idx])
+    st.session_state["today_date_label"] = str(dates[today_idx])[:10]
     
     # Clean injection passing humidity and wind variables to the chart trace
     trend_chart = build_dual_trend_chart(
@@ -745,9 +827,12 @@ with score_placeholder:
 
     with right_panel:
         st.subheader("BASIC SUMMARY RESULTS")
-        st.caption(f"Values for the most recent day on the trend chart ({st.session_state.get('today_date_label', 'today')}). These match the chart lines exactly.")
+        st.caption(
+            f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}) — "
+            "taken from the chart lines at the current day (not a future forecast day)."
+        )
 
-        # Prefer the chart-derived values so the summary always matches the red/green lines
+        # Prefer the chart-derived values so the summary always matches the red/green lines *for today*
         new_g = st.session_state.get("today_new_growth")
         exist_g = st.session_state.get("today_existing_presence")
         if new_g is None:
@@ -762,6 +847,8 @@ with score_placeholder:
 
         new_level = _level_from_score(new_g)
         exist_level = _level_from_score(exist_g)
+        new_col = _status_colour(new_level)
+        exist_col = _status_colour(exist_level)
 
         new_advice = {
             "good": "Conditions today favour fresh pin formation.",
@@ -775,24 +862,41 @@ with score_placeholder:
             "poor": "Low chance of finding existing fruit bodies right now."
         }[exist_level]
 
+        # Large, mobile-friendly display of the two key percentages
         st.markdown(
-            _metric_html(
-                "🆕 New Growth (pins forming today)",
-                f"{new_g}%",
-                new_level,
-                new_advice + " — matches the dotted red line on the chart."
-            ),
+            f'''
+            <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {new_col};
+                        background:#f6f8fa;border-radius:8px">
+              <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
+                🆕 New Growth <span style="font-weight:400;color:#666">(pins forming today)</span>
+              </div>
+              <div style="font-size:42px;font-weight:800;color:{new_col};line-height:1.1;letter-spacing:-0.02em">
+                {new_g}%
+              </div>
+              <div style="font-size:13px;color:#444;margin-top:6px">{new_advice}<br>
+                <span style="color:#888">Matches the dotted red line on the chart for today.</span>
+              </div>
+            </div>
+            ''',
             unsafe_allow_html=True
         )
         st.progress(new_g / 100)
 
         st.markdown(
-            _metric_html(
-                "🍄 Existing / Recent Growth (still findable)",
-                f"{exist_g}%",
-                exist_level,
-                exist_advice + " — matches the solid green line on the chart."
-            ),
+            f'''
+            <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {exist_col};
+                        background:#f6f8fa;border-radius:8px">
+              <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
+                🍄 Existing / Recent Growth <span style="font-weight:400;color:#666">(still findable)</span>
+              </div>
+              <div style="font-size:42px;font-weight:800;color:{exist_col};line-height:1.1;letter-spacing:-0.02em">
+                {exist_g}%
+              </div>
+              <div style="font-size:13px;color:#444;margin-top:6px">{exist_advice}<br>
+                <span style="color:#888">Matches the solid green line on the chart for today.</span>
+              </div>
+            </div>
+            ''',
             unsafe_allow_html=True
         )
         st.progress(exist_g / 100)
