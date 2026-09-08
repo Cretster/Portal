@@ -443,62 +443,72 @@ if "boom_trigger" not in st.session_state:
 st.title("🍄 Dr Pablo's Mushroom Magic")
 st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 
-# ACME-style cartoon bomb easter egg (triggered from the 💣 button in the sidebar)
-# Rendered in the main page flow so it is actually visible (iframe overlays are unreliable in Streamlit)
+# ACME-style cartoon bomb easter egg — centred modal on top of everything
+_BOMB_HTML = """
+<div style="width:100%;padding:28px 12px 20px 12px;
+            background:linear-gradient(180deg,#1a1a2e 0%,#16213e 100%);
+            border-radius:14px;text-align:center;overflow:hidden;">
+  <div style="font-size:92px;display:inline-block;position:relative;
+              animation:fizz 1.8s ease-in forwards;
+              filter:drop-shadow(0 8px 20px rgba(255,100,0,0.45));">
+    💣
+    <span style="position:absolute;top:-16px;left:62%;font-size:26px;
+                 animation:spark 0.2s linear infinite;">✨</span>
+  </div>
+  <div style="font-size:110px;margin-top:-16px;opacity:0;
+              animation:boom 1.1s ease-out 1.65s forwards;">💥</div>
+  <div style="font-family:'Comic Sans MS',cursive,sans-serif;font-size:32px;font-weight:bold;
+              color:#ffec99;text-shadow:3px 3px 0 #000, -1px -1px 0 #c00;
+              margin-top:6px;opacity:0;animation:label 0.8s ease-out 1.8s forwards;">
+    KABOOM!
+  </div>
+  <div style="color:#aaa;font-size:12px;margin-top:14px;opacity:0.75;">
+    (ACME Corporation accepts no responsibility for missing mushrooms)
+  </div>
+</div>
+<style>
+  @keyframes fizz {
+    0%   { transform: scale(1) rotate(0deg); }
+    20%  { transform: scale(1.12) rotate(-12deg); }
+    40%  { transform: scale(1.22) rotate(10deg); }
+    60%  { transform: scale(1.35) rotate(-6deg); }
+    80%  { transform: scale(1.5) rotate(4deg); }
+    100% { transform: scale(1.7) rotate(0deg); opacity:0; }
+  }
+  @keyframes spark {
+    0%   { opacity:1; transform: scale(1) translateY(0); }
+    100% { opacity:0.15; transform: scale(1.6) translateY(-10px); }
+  }
+  @keyframes boom {
+    0%   { opacity:0; transform: scale(0.15); }
+    30%  { opacity:1; transform: scale(1.9); }
+    100% { opacity:0; transform: scale(2.8); }
+  }
+  @keyframes label {
+    0%   { opacity:0; transform: scale(0.4); }
+    35%  { opacity:1; transform: scale(1.25); }
+    100% { opacity:0.85; transform: scale(1); }
+  }
+</style>
+"""
+
 if st.session_state.boom_trigger > 0:
-    st.markdown(
-        """
-        <div style="width:100%;margin:12px 0 24px 0;padding:40px 20px;
-                    background:linear-gradient(180deg,#1a1a2e 0%,#16213e 100%);
-                    border-radius:16px;text-align:center;overflow:hidden;
-                    box-shadow:0 12px 40px rgba(0,0,0,0.35);">
-          <div style="font-size:96px;display:inline-block;position:relative;
-                      animation:fizz 1.8s ease-in forwards;
-                      filter:drop-shadow(0 8px 20px rgba(255,100,0,0.4));">
-            💣
-            <span style="position:absolute;top:-18px;left:62%;font-size:28px;
-                         animation:spark 0.2s linear infinite;">✨</span>
-          </div>
-          <div style="font-size:120px;margin-top:-20px;opacity:0;
-                      animation:boom 1.1s ease-out 1.65s forwards;">💥</div>
-          <div style="font-family:'Comic Sans MS',cursive,sans-serif;font-size:36px;font-weight:bold;
-                      color:#ffec99;text-shadow:3px 3px 0 #000, -1px -1px 0 #c00;
-                      margin-top:8px;opacity:0;animation:label 0.8s ease-out 1.8s forwards;">
-            KABOOM!
-          </div>
-          <div style="color:#aaa;font-size:13px;margin-top:18px;opacity:0.7;">
-            (ACME Corporation accepts no responsibility for missing mushrooms)
-          </div>
-        </div>
-        <style>
-          @keyframes fizz {
-            0%   { transform: scale(1) rotate(0deg); }
-            20%  { transform: scale(1.12) rotate(-12deg); }
-            40%  { transform: scale(1.22) rotate(10deg); }
-            60%  { transform: scale(1.35) rotate(-6deg); }
-            80%  { transform: scale(1.5) rotate(4deg); }
-            100% { transform: scale(1.7) rotate(0deg); opacity:0; }
-          }
-          @keyframes spark {
-            0%   { opacity:1; transform: scale(1) translateY(0); }
-            100% { opacity:0.15; transform: scale(1.6) translateY(-10px); }
-          }
-          @keyframes boom {
-            0%   { opacity:0; transform: scale(0.15); }
-            30%  { opacity:1; transform: scale(1.9); }
-            100% { opacity:0; transform: scale(2.8); }
-          }
-          @keyframes label {
-            0%   { opacity:0; transform: scale(0.4); }
-            35%  { opacity:1; transform: scale(1.25); }
-            100% { opacity:0.85; transform: scale(1); }
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    # Reset so it only plays once per click
-    st.session_state.boom_trigger = 0
+    # Real modal dialog (Streamlit ≥ 1.33) — centred on top of the whole page
+    try:
+        @st.dialog("💣 ACME Special", width="large")
+        def _acme_boom_dialog():
+            st.markdown(_BOMB_HTML, unsafe_allow_html=True)
+            st.caption("Animation plays automatically. Close when you’re done.")
+            if st.button("Close", use_container_width=True, type="primary"):
+                st.session_state.boom_trigger = 0
+                st.rerun()
+        _acme_boom_dialog()
+    except Exception:
+        # Fallback for older Streamlit: banner + explicit close button
+        st.markdown(_BOMB_HTML, unsafe_allow_html=True)
+        if st.button("Close ACME demonstration", use_container_width=True):
+            st.session_state.boom_trigger = 0
+            st.rerun()
 
 if "map_click" not in st.session_state: st.session_state.map_click = None
 if "map_view" not in st.session_state: st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
