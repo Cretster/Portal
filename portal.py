@@ -166,29 +166,25 @@ def fetch_live_weather(lat, lon):
 def fetch_historical_daily(lat, lon, days_back=7):
     url = "https://open-meteo.com"
     
-    # Calculate exact date frames to bypass Open-Meteo's hourly array stitching limit
-    today_dt = datetime.now()
-    start_dt = today_dt - timedelta(days=int(days_back))
-    end_dt = today_dt + timedelta(days=3)  # Hard-coded 3 forecast tracking days
-    
-    start_str = start_dt.strftime("%Y-%m-%d")
-    end_str = end_dt.strftime("%Y-%m-%d")
+    # Force clean data conversion so Open-Meteo doesn't throw a string error
+    clean_days = int(days_back)
     
     params = {
         "latitude": float(lat),
         "longitude": float(lon),
-        "start_date": start_str,
-        "end_date": end_str,
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
         "hourly": "relative_humidity_2m,wind_speed_10m",
-        "wind_speed_unit": "kn",
+        "past_days": clean_days,     # Native Open-Meteo structural history switch
+        "forecast_days": 3,          # Predict 3 days ahead on the graph right edge
+        "wind_speed_unit": "kn",     # Request wind velocity in knots explicitly
         "timezone": "auto",
     }
     
     resp = requests.get(url, params=params, timeout=10)
     
+    # Catch any server errors immediately to prevent JSON crashing
     if resp.status_code != 200:
-        raise ValueError(f"Open-Meteo API boundary error. Status code: {resp.status_code}")
+        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}")
         
     raw = resp.json()
     daily = raw["daily"]
@@ -200,7 +196,7 @@ def fetch_historical_daily(lat, lon, days_back=7):
     daily_rh_avg = []
     daily_wind_max = []
     
-    # Bucket hourly records evenly into clean calendar day windows
+    # Bucket the hourly records evenly into clean calendar day windows
     for d_str in daily["time"]:
         day_start = datetime.fromisoformat(d_str)
         day_end = day_start + timedelta(days=1)
@@ -212,7 +208,6 @@ def fetch_historical_daily(lat, lon, days_back=7):
         daily_wind_max.append(max(wind_sub) if wind_sub else 5.0)
 
     return daily["time"], daily["temperature_2m_max"], daily["temperature_2m_min"], daily["precipitation_sum"], daily_rh_avg, daily_wind_max
-
 
 @st.cache_data(ttl=86400)
 def get_elevation_bonus(lat, lon):
