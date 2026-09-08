@@ -113,17 +113,17 @@ def ph_legend_html(ph_value=None):
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_live_weather(lat, lon):
-    url = "https://open-meteo.com"
+    url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
         "longitude": lon,
         "hourly": "temperature_2m,precipitation,relative_humidity_2m,wind_speed_10m",
         "past_days": 5, 
         "forecast_days": 1,
-        "wind_speed_unit": "kn",  # FIX: Clean parameter value alignment
+        "wind_speed_unit": "kn",
         "timezone": "auto",
     }
-    resp = requests.get(url, params=params, timeout=10)
+    resp = requests.get(url, params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
@@ -152,21 +152,27 @@ def fetch_live_weather(lat, lon):
         day_precip = sum(p for tm, p in zip(times, precip) if start <= datetime.fromisoformat(tm) < end)
         lagged_rain += day_precip * w
 
+    if not last_24h_temps:
+        last_24h_temps = temps[-24:] if len(temps) >= 24 else temps
+    if not last_48h_rh:
+        last_48h_rh = humidity[-48:] if len(humidity) >= 48 else humidity
+    if not last_24h_wind:
+        last_24h_wind = wind[-24:] if len(wind) >= 24 else wind
+
     return {
-        "day_temp": round(max(last_24h_temps), 1),
-        "night_temp": round(min(last_24h_temps), 1),
+        "day_temp": round(max(last_24h_temps), 1) if last_24h_temps else 10.0,
+        "night_temp": round(min(last_24h_temps), 1) if last_24h_temps else 5.0,
         "rain_48h": round(sum(last_48h_precip), 1),
         "lagged_rain_score": round(lagged_rain * 5, 1), 
-        "avg_humidity_48h": round(sum(last_48h_rh) / len(last_48h_rh), 1),
-        "max_wind_24h": round(max(last_24h_wind), 1),
-        "had_frost": min(last_24h_temps) <= 0
+        "avg_humidity_48h": round(sum(last_48h_rh) / len(last_48h_rh), 1) if last_48h_rh else 80.0,
+        "max_wind_24h": round(max(last_24h_wind), 1) if last_24h_wind else 5.0,
+        "had_frost": (min(last_24h_temps) <= 0) if last_24h_temps else False
     }
     
 @st.cache_data(ttl=1800)
 def fetch_historical_daily(lat, lon, days_back=7):
-    url = "https://open-meteo.com"
+    url = "https://api.open-meteo.com/v1/forecast"
     
-    # Force clean data conversion so Open-Meteo doesn't throw a string error
     clean_days = int(days_back)
     
     params = {
@@ -174,19 +180,21 @@ def fetch_historical_daily(lat, lon, days_back=7):
         "longitude": float(lon),
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
         "hourly": "relative_humidity_2m,wind_speed_10m",
-        "past_days": clean_days,     # Native Open-Meteo structural history switch
-        "forecast_days": 3,          # Predict 3 days ahead on the graph right edge
-        "wind_speed_unit": "kn",     # Request wind velocity in knots explicitly
+        "past_days": clean_days,
+        "forecast_days": 3,
+        "wind_speed_unit": "kn",
         "timezone": "auto",
     }
     
-    resp = requests.get(url, params=params, timeout=10)
+    resp = requests.get(url, params=params, timeout=15)
     
-    # Catch any server errors immediately to prevent JSON crashing
     if resp.status_code != 200:
-        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}")
+        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}: {resp.text[:200]}")
         
     raw = resp.json()
+    if "daily" not in raw or "hourly" not in raw:
+        raise ValueError(f"Unexpected Open-Meteo response structure: {list(raw.keys())}")
+        
     daily = raw["daily"]
     
     h_time = raw["hourly"]["time"]
@@ -196,7 +204,6 @@ def fetch_historical_daily(lat, lon, days_back=7):
     daily_rh_avg = []
     daily_wind_max = []
     
-    # Bucket the hourly records evenly into clean calendar day windows
     for d_str in daily["time"]:
         day_start = datetime.fromisoformat(d_str)
         day_end = day_start + timedelta(days=1)
@@ -212,13 +219,20 @@ def fetch_historical_daily(lat, lon, days_back=7):
 @st.cache_data(ttl=86400)
 def get_elevation_bonus(lat, lon):
     try:
-        url = "https://open-meteo.com"
-        params = {"latitude": lat, "longitude": lon}
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "daily": "temperature_2m_max",
+            "forecast_days": 1,
+            "timezone": "auto",
+        }
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
-        elev = resp.json()["elevation"]
+        data = resp.json()
+        elev = data.get("elevation", 0)
         return min(4, int(elev // 55)), elev
-    except:
+    except Exception:
         return 0, 0
 
 # ---------------------------------------------------------------------------
@@ -228,10 +242,10 @@ def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_r
     current_month = datetime.now().month
     
     if current_month not in rules["fruiting_months"]:
-        return 0, 0, "🔴 Suppressed: Outside seasonal fruiting calendar.", {}
+        return 0, {}, "🔴 Suppressed: Outside seasonal fruiting calendar."
 
     if rules["frost_kill"] and has_frost:
-        return 0, 0, "❄️ Season Terminated: Sub-zero frost destroyed surface structures.", {}
+        return 0, {}, "❄️ Season Terminated: Sub-zero frost destroyed surface structures."
 
     day_score = 30 if rules["day_min"] <= day_temp <= rules["day_max"] else (10 if (rules["day_min"] - 3) <= day_temp <= (rules["day_max"] + 3) else 0)
     night_score = 20 if rules["night_min"] <= night_temp <= rules["night_max"] else (5 if (rules["night_min"] - 2) <= night_temp <= (rules["night_max"] + 2) else 0)
