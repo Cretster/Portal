@@ -444,59 +444,58 @@ st.title("🍄 Dr Pablo's Mushroom Magic")
 st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 
 # ACME-style cartoon bomb easter egg (triggered from the 💣 button in the sidebar)
+# Rendered in the main page flow so it is actually visible (iframe overlays are unreliable in Streamlit)
 if st.session_state.boom_trigger > 0:
-    import streamlit.components.v1 as components
-    components.html(
+    st.markdown(
         """
-        <div id="acme-boom-root" style="position:fixed;top:0;left:0;width:100vw;height:100vh;
-             display:flex;align-items:center;justify-content:center;z-index:99999;
-             pointer-events:none;background:rgba(0,0,0,0.25);">
-          <div id="acme-bomb" style="font-size:96px;position:relative;animation:fizz 1.7s ease-in forwards;
-               filter:drop-shadow(0 8px 16px rgba(0,0,0,0.35));">
+        <div style="width:100%;margin:12px 0 24px 0;padding:40px 20px;
+                    background:linear-gradient(180deg,#1a1a2e 0%,#16213e 100%);
+                    border-radius:16px;text-align:center;overflow:hidden;
+                    box-shadow:0 12px 40px rgba(0,0,0,0.35);">
+          <div style="font-size:96px;display:inline-block;position:relative;
+                      animation:fizz 1.8s ease-in forwards;
+                      filter:drop-shadow(0 8px 20px rgba(255,100,0,0.4));">
             💣
-            <div style="position:absolute;top:-22px;left:60%;font-size:26px;
-                 animation:spark 0.22s linear infinite;">✨</div>
+            <span style="position:absolute;top:-18px;left:62%;font-size:28px;
+                         animation:spark 0.2s linear infinite;">✨</span>
           </div>
-          <div id="acme-explode" style="font-size:140px;position:absolute;opacity:0;
-               animation:boom 1.0s ease-out 1.6s forwards;">💥</div>
-          <div style="position:absolute;bottom:18%;left:50%;transform:translateX(-50%);
-               font-family:Comic Sans MS, cursive, sans-serif;font-size:28px;font-weight:bold;
-               color:#fff;text-shadow:2px 2px 0 #000;opacity:0;animation:label 0.6s ease-out 1.7s forwards;">
+          <div style="font-size:120px;margin-top:-20px;opacity:0;
+                      animation:boom 1.1s ease-out 1.65s forwards;">💥</div>
+          <div style="font-family:'Comic Sans MS',cursive,sans-serif;font-size:36px;font-weight:bold;
+                      color:#ffec99;text-shadow:3px 3px 0 #000, -1px -1px 0 #c00;
+                      margin-top:8px;opacity:0;animation:label 0.8s ease-out 1.8s forwards;">
             KABOOM!
+          </div>
+          <div style="color:#aaa;font-size:13px;margin-top:18px;opacity:0.7;">
+            (ACME Corporation accepts no responsibility for missing mushrooms)
           </div>
         </div>
         <style>
           @keyframes fizz {
             0%   { transform: scale(1) rotate(0deg); }
-            25%  { transform: scale(1.1) rotate(-10deg); }
-            50%  { transform: scale(1.2) rotate(8deg); }
-            75%  { transform: scale(1.35) rotate(-4deg); }
-            100% { transform: scale(1.5) rotate(0deg); opacity:0; }
+            20%  { transform: scale(1.12) rotate(-12deg); }
+            40%  { transform: scale(1.22) rotate(10deg); }
+            60%  { transform: scale(1.35) rotate(-6deg); }
+            80%  { transform: scale(1.5) rotate(4deg); }
+            100% { transform: scale(1.7) rotate(0deg); opacity:0; }
           }
           @keyframes spark {
             0%   { opacity:1; transform: scale(1) translateY(0); }
-            100% { opacity:0.2; transform: scale(1.5) translateY(-8px); }
+            100% { opacity:0.15; transform: scale(1.6) translateY(-10px); }
           }
           @keyframes boom {
-            0%   { opacity:0; transform: scale(0.2); }
-            25%  { opacity:1; transform: scale(1.8); }
-            100% { opacity:0; transform: scale(2.6); }
+            0%   { opacity:0; transform: scale(0.15); }
+            30%  { opacity:1; transform: scale(1.9); }
+            100% { opacity:0; transform: scale(2.8); }
           }
           @keyframes label {
-            0%   { opacity:0; transform: translateX(-50%) scale(0.5); }
-            40%  { opacity:1; transform: translateX(-50%) scale(1.2); }
-            100% { opacity:0; transform: translateX(-50%) scale(1); }
+            0%   { opacity:0; transform: scale(0.4); }
+            35%  { opacity:1; transform: scale(1.25); }
+            100% { opacity:0.85; transform: scale(1); }
           }
         </style>
-        <script>
-          setTimeout(function() {
-            var root = document.getElementById('acme-boom-root');
-            if (root) root.style.display = 'none';
-          }, 3000);
-        </script>
         """,
-        height=120,
-        scrolling=False,
+        unsafe_allow_html=True,
     )
     # Reset so it only plays once per click
     st.session_state.boom_trigger = 0
