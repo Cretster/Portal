@@ -445,6 +445,9 @@ if "ph_opacity" not in st.session_state: st.session_state.ph_opacity = 0.65
 if "map_initialized" not in st.session_state: st.session_state.map_initialized = False
 if "map_version" not in st.session_state: st.session_state.map_version = 0
 if "handled_click_id" not in st.session_state: st.session_state.handled_click_id = None
+if "today_new_growth" not in st.session_state: st.session_state.today_new_growth = None
+if "today_existing_presence" not in st.session_state: st.session_state.today_existing_presence = None
+if "today_date_label" not in st.session_state: st.session_state.today_date_label = "today"
 
 ph_grid = load_ph_grid()
 
@@ -543,6 +546,12 @@ try:
         
     historical_presence_stream = generate_decayed_presence_array(historical_growth_stream, rules["decay_days"])
     
+    # Authoritative "today" values taken from the same series the chart uses
+    # (last point = most recent day in the returned timeline)
+    st.session_state["today_new_growth"] = int(historical_growth_stream[-1]) if historical_growth_stream else 0
+    st.session_state["today_existing_presence"] = int(historical_presence_stream[-1]) if historical_presence_stream else 0
+    st.session_state["today_date_label"] = dates[-1] if dates else "today"
+    
     # Clean injection passing humidity and wind variables to the chart trace
     trend_chart = build_dual_trend_chart(
         dates, h_day, h_night, h_rain, historical_growth_stream, 
@@ -551,6 +560,9 @@ try:
     st.plotly_chart(trend_chart, use_container_width=True)
     st.info("💡 **How to interpret the trend chart:** The dotted Red line shows spikes when conditions were perfect for *new* growth. The solid Green line indicates field presence; notice how it lingers and drops slowly over a few days even after the weather shifts.  Click on any line name in the Key to hide/unhide the line.  Double click them to hide/unhide all other lines.")
 except Exception as e:
+    st.session_state["today_new_growth"] = None
+    st.session_state["today_existing_presence"] = None
+    st.session_state["today_date_label"] = "today"
     st.error(f"Could not build integrated visual model timelines: {e}")
 
 
@@ -732,20 +744,71 @@ with score_placeholder:
             st.info(f"⛰️ **Upland Altitude Edge Advantage applied:** +{bonus * 5}% probability bias (elevation ≈ {int(elevation)} m).")
 
     with right_panel:
-        st.subheader("Calculated Probability Results")
-        st.metric(label="IMMEDIATE NEW PIN ERUPTION PROBABILITY", value=f"{growth_score}%", border=True)
-        st.progress(growth_score / 100)
-        st.markdown(f"### Real-Time Verdict: \n*{verdict}*")
-        
-        st.caption(
-            "Note: This live % is the **new-growth** potential for the current weather window. "
-            "On the trend chart the dotted red line is the same concept (day-by-day new growth). "
-            "The solid green line is **lingering field presence** — it stays high for a few days after a good growth day even if today’s new-growth score is lower. "
-            "That is why the two numbers can differ."
+        st.subheader("BASIC SUMMARY RESULTS")
+        st.caption(f"Values for the most recent day on the trend chart ({st.session_state.get('today_date_label', 'today')}). These match the chart lines exactly.")
+
+        # Prefer the chart-derived values so the summary always matches the red/green lines
+        new_g = st.session_state.get("today_new_growth")
+        exist_g = st.session_state.get("today_existing_presence")
+        if new_g is None:
+            new_g = growth_score          # fallback if chart failed
+        if exist_g is None:
+            exist_g = growth_score
+
+        def _level_from_score(s):
+            if s >= 75: return "good"
+            if s >= 45: return "moderate"
+            return "poor"
+
+        new_level = _level_from_score(new_g)
+        exist_level = _level_from_score(exist_g)
+
+        new_advice = {
+            "good": "Conditions today favour fresh pin formation.",
+            "moderate": "Some potential for new pins, but not ideal.",
+            "poor": "Unfavourable for new pin formation today."
+        }[new_level]
+
+        exist_advice = {
+            "good": "High chance of still finding fruit bodies from recent good days.",
+            "moderate": "Moderate chance of finding recently formed fruit bodies.",
+            "poor": "Low chance of finding existing fruit bodies right now."
+        }[exist_level]
+
+        st.markdown(
+            _metric_html(
+                "🆕 New Growth (pins forming today)",
+                f"{new_g}%",
+                new_level,
+                new_advice + " — matches the dotted red line on the chart."
+            ),
+            unsafe_allow_html=True
         )
-        
+        st.progress(new_g / 100)
+
+        st.markdown(
+            _metric_html(
+                "🍄 Existing / Recent Growth (still findable)",
+                f"{exist_g}%",
+                exist_level,
+                exist_advice + " — matches the solid green line on the chart."
+            ),
+            unsafe_allow_html=True
+        )
+        st.progress(exist_g / 100)
+
+        # Overall verdict based primarily on new growth, with a nod to presence
+        if new_g >= 75:
+            summary_verdict = "🟩 EXCELLENT: Strong conditions for new pins today."
+        elif new_g >= 45 or exist_g >= 60:
+            summary_verdict = "🟨 MODERATE: Worth checking — either new growth is possible or recent fruit may still be present."
+        else:
+            summary_verdict = "🟥 POOR: Neither new pins nor lingering fruit look likely at this location right now."
+
+        st.markdown(f"### At-a-glance Verdict\n*{summary_verdict}*")
+
         if breakdown:
-            st.markdown("#### Weighting Influences:")
+            st.markdown("#### Weighting Influences (underlying model):")
             st.caption(
                 f"Temp Yield: {breakdown.get('day',0) + breakdown.get('night',0)}/50 pts | "
                 f"Soil Water: {breakdown.get('rain',0)}/30 pts | "
