@@ -493,22 +493,21 @@ _BOMB_HTML = """
 """
 
 if st.session_state.boom_trigger > 0:
-    # Real modal dialog (Streamlit ≥ 1.33) — centred on top of the whole page
+    # One-shot: clear the flag immediately so closing via X (or a later map click)
+    # cannot re-open the animation. The dialog still appears on this run.
+    st.session_state.boom_trigger = 0
+
     try:
         @st.dialog("💣 ACME Special", width="large")
         def _acme_boom_dialog():
             st.markdown(_BOMB_HTML, unsafe_allow_html=True)
             st.caption("Animation plays automatically. Close when you’re done.")
-            if st.button("Close", use_container_width=True, type="primary"):
-                st.session_state.boom_trigger = 0
-                st.rerun()
+            st.button("Close", use_container_width=True, type="primary")
         _acme_boom_dialog()
     except Exception:
         # Fallback for older Streamlit: banner + explicit close button
         st.markdown(_BOMB_HTML, unsafe_allow_html=True)
-        if st.button("Close ACME demonstration", use_container_width=True):
-            st.session_state.boom_trigger = 0
-            st.rerun()
+        st.button("Close ACME demonstration", use_container_width=True)
 
 if "map_click" not in st.session_state: st.session_state.map_click = None
 if "map_view" not in st.session_state: st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
