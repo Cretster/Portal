@@ -502,12 +502,14 @@ if st.session_state.boom_trigger > 0:
         def _acme_boom_dialog():
             st.markdown(_BOMB_HTML, unsafe_allow_html=True)
             st.caption("Animation plays automatically. Close when you’re done.")
-            st.button("Close", use_container_width=True, type="primary")
+            if st.button("Close", use_container_width=True, type="primary"):
+                st.rerun()  # forces the dialog to dismiss
         _acme_boom_dialog()
     except Exception:
         # Fallback for older Streamlit: banner + explicit close button
         st.markdown(_BOMB_HTML, unsafe_allow_html=True)
-        st.button("Close ACME demonstration", use_container_width=True)
+        if st.button("Close ACME demonstration", use_container_width=True):
+            st.rerun()
 
 if "map_click" not in st.session_state: st.session_state.map_click = None
 if "map_view" not in st.session_state: st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
