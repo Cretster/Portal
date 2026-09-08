@@ -22,17 +22,23 @@ SPECIES_MATRIX = {
         "preferred_ph_min": 6.5, "preferred_ph_max": 7.5,
         "wind_tolerance": 22.0,     
         "fruiting_months": (8, 9, 10), 
-        "decay_days": 5             
+        "decay_days": 5,
+        "ideal_day": 15.0,
+        "ideal_night": 9.5,
+        "max_diurnal": 8.0
     },
     "🍄 'Liberty Cap' (Psilocybe semilanceata)": {
-        "day_min": 5.0, "day_max": 14.0,
-        "night_min": 4.0, "night_max": 10.0,
+        "day_min": 10.0, "day_max": 17.0,          # daily max; ideal centre ~14 °C
+        "night_min": 6.5, "night_max": 11.5,        # daily min; ideal centre ~9 °C
         "rain_trigger": 15.0,       
         "frost_kill": True,
-        "preferred_ph_min": 5.0, "preferred_ph_max": 6.5,
+        "preferred_ph_min": 4.0, "preferred_ph_max": 6.0,  # aligns with data-driven 4.0–6.0
         "wind_tolerance": 13.0,     
         "fruiting_months": (9, 10, 11, 12), 
-        "decay_days": 3             
+        "decay_days": 3,
+        "ideal_day": 14.0,
+        "ideal_night": 9.0,
+        "max_diurnal": 6.5
     }
 }
 
@@ -265,6 +271,16 @@ def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_r
         diff = max_wind - rules["wind_tolerance"]
         wind_penalty = max(0.4, 1.0 - (diff * 0.05))
 
+    # Day–night temperature swing penalty (smaller swings preferred)
+    diurnal = day_temp - night_temp
+    max_diurnal = rules.get("max_diurnal", 7.0)
+    if diurnal <= max_diurnal:
+        diurnal_penalty = 1.0
+    elif diurnal <= max_diurnal + 2:
+        diurnal_penalty = 0.85
+    else:
+        diurnal_penalty = max(0.5, 1.0 - ((diurnal - max_diurnal) * 0.08))
+
     ph_modifier = 1.0
     if selected_ph is not None:
         if not (rules["preferred_ph_min"] <= selected_ph <= rules["preferred_ph_max"]):
@@ -272,7 +288,7 @@ def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_r
             ph_modifier = max(0.1, 1.0 - (dist * 0.5))
 
     base_gpi = day_score + night_score + rain_score + (bonus * 5)
-    final_growth_score = int(min(base_gpi, 100) * rh_modifier * wind_penalty * ph_modifier)
+    final_growth_score = int(min(base_gpi, 100) * rh_modifier * wind_penalty * diurnal_penalty * ph_modifier)
 
     if final_growth_score >= 75:
         verdict = "🟩 EXCELLENT: Ideal environmental alignment. Spontaneous fruiting likely."
@@ -281,7 +297,11 @@ def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_r
     else:
         verdict = "🟥 POOR: Unviable micro-climate. New surface eruption suppressed."
 
-    breakdown = {"day": day_score, "night": night_score, "rain": rain_score, "rh_mod": rh_modifier, "wind_pen": wind_penalty, "ph_mod": ph_modifier}
+    breakdown = {
+        "day": day_score, "night": night_score, "rain": rain_score,
+        "rh_mod": rh_modifier, "wind_pen": wind_penalty,
+        "diurnal_pen": diurnal_penalty, "ph_mod": ph_modifier
+    }
     return final_growth_score, breakdown, verdict
 
 def generate_decayed_presence_array(growth_scores, decay_span):
@@ -599,18 +619,117 @@ growth_score, breakdown, verdict = calculate_growth_and_presence_scores(
     d_temp_sim, n_temp_sim, rain_sim, avg_rh_sim, max_wind_sim, frost_sim, bonus, rules, current_ph
 )
 
+# --- helpers for traffic-light colour + short advice ---
+def _status_colour(level):
+    return {"good": "#1a7f37", "moderate": "#b78100", "poor": "#cf222e"}.get(level, "#57606a")
+
+def _metric_html(label, value_str, level, advice):
+    col = _status_colour(level)
+    return (
+        f'<div style="margin:6px 0 10px 0;padding:8px 10px;border-left:4px solid {col};'
+        f'background:#f6f8fa;border-radius:4px">'
+        f'<span style="font-weight:600;color:{col}">{label}: {value_str}</span><br>'
+        f'<span style="font-size:13px;color:#444">{advice}</span></div>'
+    )
+
+diurnal = round(d_temp_sim - n_temp_sim, 1)
+ideal_day = rules.get("ideal_day", (rules["day_min"] + rules["day_max"]) / 2)
+ideal_night = rules.get("ideal_night", (rules["night_min"] + rules["night_max"]) / 2)
+max_diurnal = rules.get("max_diurnal", 7.0)
+
+# Day temp status
+if rules["day_min"] <= d_temp_sim <= rules["day_max"]:
+    day_level, day_advice = "good", f"Within preferred daytime range ({rules['day_min']}–{rules['day_max']}°C). Ideal centre ≈ {ideal_day}°C."
+elif (rules["day_min"] - 3) <= d_temp_sim <= (rules["day_max"] + 3):
+    day_level, day_advice = "moderate", f"Marginal. Preferred daytime max is {rules['day_min']}–{rules['day_max']}°C (ideal ≈ {ideal_day}°C)."
+else:
+    day_level = "poor"
+    if d_temp_sim > rules["day_max"]:
+        day_advice = f"TOO WARM. Daytime max is above the preferred {rules['day_max']}°C (ideal ≈ {ideal_day}°C)."
+    else:
+        day_advice = f"TOO COOL. Daytime max is below the preferred {rules['day_min']}°C (ideal ≈ {ideal_day}°C)."
+
+# Night temp status
+if rules["night_min"] <= n_temp_sim <= rules["night_max"]:
+    night_level, night_advice = "good", f"Within preferred night range ({rules['night_min']}–{rules['night_max']}°C). Ideal centre ≈ {ideal_night}°C."
+elif (rules["night_min"] - 2) <= n_temp_sim <= (rules["night_max"] + 2):
+    night_level, night_advice = "moderate", f"Marginal. Preferred night min is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+else:
+    night_level = "poor"
+    if n_temp_sim > rules["night_max"]:
+        night_advice = f"TOO WARM at night. Preferred night range is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+    else:
+        night_advice = f"TOO COLD at night. Preferred night range is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+
+# Diurnal difference
+if diurnal <= max_diurnal:
+    diur_level, diur_advice = "good", f"Day–night difference ({diurnal}°C) is within preferred limit (≤ {max_diurnal}°C). Smaller swings favour fruiting."
+elif diurnal <= max_diurnal + 2:
+    diur_level, diur_advice = "moderate", f"Day–night difference ({diurnal}°C) is a little high. Preferred ≤ {max_diurnal}°C."
+else:
+    diur_level, diur_advice = "poor", f"Large day–night swing ({diurnal}°C). Preferred ≤ {max_diurnal}°C; big swings reduce fruiting likelihood."
+
+# Rain / soil water
+if rain_sim >= rules["rain_trigger"]:
+    rain_level, rain_advice = "good", f"Soil water charge meets or exceeds trigger (≥ {rules['rain_trigger']} pts). Recent moisture is favourable."
+elif rain_sim >= rules["rain_trigger"] / 2:
+    rain_level, rain_advice = "moderate", f"Moderate moisture. Full trigger is ≥ {rules['rain_trigger']} pts."
+else:
+    rain_level, rain_advice = "poor", f"TOO DRY. Soil water charge is below half the trigger ({rules['rain_trigger']} pts)."
+
+# Humidity
+if avg_rh_sim >= 90:
+    rh_level, rh_advice = "good", "High humidity (≥ 90 %) strongly supports pin formation and development."
+elif avg_rh_sim >= 83:
+    rh_level, rh_advice = "moderate", "Humidity is acceptable (83–90 %). ≥ 90 % is ideal."
+elif avg_rh_sim >= 75:
+    rh_level, rh_advice = "moderate", "Humidity is on the low side. ≥ 83 % preferred, ≥ 90 % ideal."
+else:
+    rh_level, rh_advice = "poor", "TOO DRY AIR. Humidity below 75 % strongly suppresses surface growth."
+
+# Wind
+if max_wind_sim <= rules["wind_tolerance"]:
+    wind_level, wind_advice = "good", f"Wind within tolerance (≤ {rules['wind_tolerance']} kn). Low desiccation risk."
+elif max_wind_sim <= rules["wind_tolerance"] + 5:
+    wind_level, wind_advice = "moderate", f"Wind a little high. Preferred ≤ {rules['wind_tolerance']} kn."
+else:
+    wind_level, wind_advice = "poor", f"TOO WINDY. Peak wind above tolerance ({rules['wind_tolerance']} kn) increases drying and can abort pins."
+
+# Frost
+if frost_sim and rules["frost_kill"]:
+    frost_level, frost_advice = "poor", "Hard frost is active — surface fruit bodies are likely killed or prevented."
+else:
+    frost_level, frost_advice = "good", "No hard frost detected."
+
+# pH
+if current_ph is None:
+    ph_level, ph_advice = "moderate", "No local pH sample available for this point."
+    ph_str = "n/a"
+else:
+    ph_str = f"{current_ph:.1f}"
+    if rules["preferred_ph_min"] <= current_ph <= rules["preferred_ph_max"]:
+        ph_level, ph_advice = "good", f"Soil pH inside preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+    else:
+        dist = min(abs(current_ph - rules["preferred_ph_min"]), abs(current_ph - rules["preferred_ph_max"]))
+        if dist <= 0.5:
+            ph_level, ph_advice = "moderate", f"pH close to preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+        else:
+            ph_level, ph_advice = "poor", f"pH outside preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+
 with score_placeholder:
     left_panel, right_panel = st.columns(2)
     with left_panel:
-        st.subheader("🎛️ Live Weather Metrics")
-        st.write(f"• **Day Temp Max:** {d_temp_sim}°C")
-        st.write(f"• **Night Temp Min:** {n_temp_sim}°C")
-        st.write(f"• **Soil Hydration Score:** {rain_sim} pts")
-        st.write(f"• **Mean Relative Humidity:** {avg_rh_sim}%")
-        st.write(f"• **Peak Wind Speed:** {max_wind_sim} knots")
-        st.write(f"• **Frost Active:** {'Yes ❄️' if frost_sim else 'No'}")
+        st.subheader("🎛️ Live Weather & Site Metrics")
+        st.markdown(_metric_html("Day Temp Max", f"{d_temp_sim}°C", day_level, day_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Night Temp Min", f"{n_temp_sim}°C", night_level, night_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Day–Night Difference", f"{diurnal}°C", diur_level, diur_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Soil Hydration Score", f"{rain_sim} pts", rain_level, rain_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Mean Relative Humidity", f"{avg_rh_sim}%", rh_level, rh_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Peak Wind Speed", f"{max_wind_sim} kn", wind_level, wind_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Frost Active", "Yes ❄️" if frost_sim else "No", frost_level, frost_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Soil pH (0–5 cm)", ph_str, ph_level, ph_advice), unsafe_allow_html=True)
         if bonus > 0:
-            st.info(f"⛰️ **Upland Altitude Edge Advantage mapping applied:** +{bonus * 5}% probability bias.")
+            st.info(f"⛰️ **Upland Altitude Edge Advantage applied:** +{bonus * 5}% probability bias (elevation ≈ {int(elevation)} m).")
 
     with right_panel:
         st.subheader("Calculated Probability Results")
@@ -618,6 +737,20 @@ with score_placeholder:
         st.progress(growth_score / 100)
         st.markdown(f"### Real-Time Verdict: \n*{verdict}*")
         
+        st.caption(
+            "Note: This live % is the **new-growth** potential for the current weather window. "
+            "On the trend chart the dotted red line is the same concept (day-by-day new growth). "
+            "The solid green line is **lingering field presence** — it stays high for a few days after a good growth day even if today’s new-growth score is lower. "
+            "That is why the two numbers can differ."
+        )
+        
         if breakdown:
             st.markdown("#### Weighting Influences:")
-            st.caption(f"Temp Yield: {breakdown['day'] + breakdown['night']}/50 pts | Soil Water: {breakdown['rain']}/30 pts | Humidity Scalar: x{breakdown['rh_mod']:.2f} | Wind Desiccation Penalty: x{breakdown['wind_pen']:.2f} | Geochemical Multiplier: x{breakdown['ph_mod']:.2f}")
+            st.caption(
+                f"Temp Yield: {breakdown.get('day',0) + breakdown.get('night',0)}/50 pts | "
+                f"Soil Water: {breakdown.get('rain',0)}/30 pts | "
+                f"Humidity Scalar: x{breakdown.get('rh_mod',1):.2f} | "
+                f"Wind Penalty: x{breakdown.get('wind_pen',1):.2f} | "
+                f"Diurnal Penalty: x{breakdown.get('diurnal_pen',1):.2f} | "
+                f"pH Multiplier: x{breakdown.get('ph_mod',1):.2f}"
+            )
