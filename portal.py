@@ -161,26 +161,34 @@ def fetch_live_weather(lat, lon):
         "max_wind_24h": round(max(last_24h_wind), 1),
         "had_frost": min(last_24h_temps) <= 0
     }
-
+    
 @st.cache_data(ttl=1800)
 def fetch_historical_daily(lat, lon, days_back=7):
     url = "https://open-meteo.com"
-    clean_days = int(days_back)
+    
+    # Calculate exact date frames to bypass Open-Meteo's hourly array stitching limit
+    today_dt = datetime.now()
+    start_dt = today_dt - timedelta(days=int(days_back))
+    end_dt = today_dt + timedelta(days=3)  # Hard-coded 3 forecast tracking days
+    
+    start_str = start_dt.strftime("%Y-%m-%d")
+    end_str = end_dt.strftime("%Y-%m-%d")
     
     params = {
         "latitude": float(lat),
         "longitude": float(lon),
+        "start_date": start_str,
+        "end_date": end_str,
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
         "hourly": "relative_humidity_2m,wind_speed_10m",
-        "past_days": clean_days,
-        "forecast_days": 3,
-        "wind_speed_unit": "kn",  # FIX: Clean parameter value alignment
+        "wind_speed_unit": "kn",
         "timezone": "auto",
     }
+    
     resp = requests.get(url, params=params, timeout=10)
     
     if resp.status_code != 200:
-        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}")
+        raise ValueError(f"Open-Meteo API boundary error. Status code: {resp.status_code}")
         
     raw = resp.json()
     daily = raw["daily"]
@@ -192,9 +200,11 @@ def fetch_historical_daily(lat, lon, days_back=7):
     daily_rh_avg = []
     daily_wind_max = []
     
+    # Bucket hourly records evenly into clean calendar day windows
     for d_str in daily["time"]:
         day_start = datetime.fromisoformat(d_str)
         day_end = day_start + timedelta(days=1)
+        
         rh_sub = [h for t, h in zip(h_time, h_rh) if day_start <= datetime.fromisoformat(t) < day_end]
         wind_sub = [w for t, w in zip(h_time, h_wind) if day_start <= datetime.fromisoformat(t) < day_end]
         
