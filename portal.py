@@ -109,7 +109,7 @@ def ph_legend_html(ph_value=None):
     parts.append("</div>")
     return "".join(parts)
 # ---------------------------------------------------------------------------
-# 3. Weather API Processing Engine (Updated with explicit Knots unit alignment)
+# 3. Weather API Processing Engine (Calibrated Unit Alignment)
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_live_weather(lat, lon):
@@ -120,7 +120,7 @@ def fetch_live_weather(lat, lon):
         "hourly": "temperature_2m,precipitation,relative_humidity_2m,wind_speed_10m",
         "past_days": 5, 
         "forecast_days": 1,
-        "wind_speed_unit": "knots",  # FIX: Enforce knots unit calibration
+        "wind_speed_unit": "kn",  # FIX: Clean parameter value alignment
         "timezone": "auto",
     }
     resp = requests.get(url, params=params, timeout=10)
@@ -174,7 +174,7 @@ def fetch_historical_daily(lat, lon, days_back=7):
         "hourly": "relative_humidity_2m,wind_speed_10m",
         "past_days": clean_days,
         "forecast_days": 3,
-        "wind_speed_unit": "knots",  # FIX: Enforce knots unit calibration
+        "wind_speed_unit": "kn",  # FIX: Clean parameter value alignment
         "timezone": "auto",
     }
     resp = requests.get(url, params=params, timeout=10)
