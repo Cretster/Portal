@@ -109,7 +109,7 @@ def ph_legend_html(ph_value=None):
     parts.append("</div>")
     return "".join(parts)
 # ---------------------------------------------------------------------------
-# 3. Weather API Processing Engine
+# 3. Weather API Processing Engine (Updated with explicit Knots unit alignment)
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_live_weather(lat, lon):
@@ -120,6 +120,7 @@ def fetch_live_weather(lat, lon):
         "hourly": "temperature_2m,precipitation,relative_humidity_2m,wind_speed_10m",
         "past_days": 5, 
         "forecast_days": 1,
+        "wind_speed_unit": "knots",  # FIX: Enforce knots unit calibration
         "timezone": "auto",
     }
     resp = requests.get(url, params=params, timeout=10)
@@ -162,11 +163,8 @@ def fetch_live_weather(lat, lon):
     }
 
 @st.cache_data(ttl=1800)
-@st.cache_data(ttl=1800)
 def fetch_historical_daily(lat, lon, days_back=7):
-    url = "https://api.open-meteo.com/v1/forecast"
-    
-    # Force clean data conversion so Open-Meteo doesn't throw a string error
+    url = "https://open-meteo.com"
     clean_days = int(days_back)
     
     params = {
@@ -176,12 +174,11 @@ def fetch_historical_daily(lat, lon, days_back=7):
         "hourly": "relative_humidity_2m,wind_speed_10m",
         "past_days": clean_days,
         "forecast_days": 3,
+        "wind_speed_unit": "knots",  # FIX: Enforce knots unit calibration
         "timezone": "auto",
     }
-    
     resp = requests.get(url, params=params, timeout=10)
     
-    # Catch any server errors immediately to prevent JSON crashing
     if resp.status_code != 200:
         raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}")
         
@@ -487,7 +484,7 @@ score_placeholder = st.container()
 # 7. Trend Visualization Timeline Generation
 # ---------------------------------------------------------------------------
 st.markdown("---")
-st.subheader("📈 Time-Lagged Probability and Decay Persistence Analysis")
+st.subheader("📈 Growth Probability and Condition Trends")
 st.caption("Plots the immediate eruption switch threshold versus lingering field presence over a rolling window.")
 
 history_days = st.slider("Days of Weather History to include", 7, 30, 9, key="hist_days_slider")
