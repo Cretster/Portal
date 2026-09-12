@@ -14,19 +14,6 @@ from folium.raster_layers import ImageOverlay
 # 1. Target Species Parameter Matrix
 # ---------------------------------------------------------------------------
 SPECIES_MATRIX = {
-    "😁 'Field Mushroom' (Agaricus campestris)": {
-        "day_min": 12.0, "day_max": 18.0,
-        "night_min": 7.0, "night_max": 12.0,
-        "rain_trigger": 12.0,       
-        "frost_kill": True,
-        "preferred_ph_min": 6.5, "preferred_ph_max": 7.5,
-        "wind_tolerance": 22.0,     
-        "fruiting_months": (8, 9, 10), 
-        "decay_days": 5,
-        "ideal_day": 15.0,
-        "ideal_night": 9.5,
-        "max_diurnal": 8.0
-    },
     "🍄 'Liberty Cap' (Psilocybe semilanceata)": {
         "day_min": 10.0, "day_max": 17.0,          # daily max; ideal centre ~14 °C
         "night_min": 6.5, "night_max": 11.5,        # daily min; ideal centre ~9 °C
@@ -39,7 +26,21 @@ SPECIES_MATRIX = {
         "ideal_day": 14.0,
         "ideal_night": 9.0,
         "max_diurnal": 6.5
+    },  
+    "😁 'Field Mushroom' (Agaricus campestris)": {
+        "day_min": 12.0, "day_max": 18.0,
+        "night_min": 7.0, "night_max": 12.0,
+        "rain_trigger": 12.0,       
+        "frost_kill": True,
+        "preferred_ph_min": 6.5, "preferred_ph_max": 7.5,
+        "wind_tolerance": 22.0,     
+        "fruiting_months": (8, 9, 10), 
+        "decay_days": 5,
+        "ideal_day": 15.0,
+        "ideal_night": 9.5,
+        "max_diurnal": 8.0
     }
+
 }
 
 # ---------------------------------------------------------------------------
