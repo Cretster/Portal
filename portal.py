@@ -483,7 +483,7 @@ _BOMB_HTML = """
   <div style="font-family:'Comic Sans MS',cursive,sans-serif;font-size:32px;font-weight:bold;
               color:#ffec99;text-shadow:3px 3px 0 #000, -1px -1px 0 #c00;
               margin-top:6px;opacity:0;animation:label 0.8s ease-out 1.8s forwards;">
-    KABOOM!
+    BRGH!!!!!
   </div>
   <div style="color:#aaa;font-size:12px;margin-top:14px;opacity:0.75;">
     (ACME Corporation accepts no responsibility for missing mushrooms)
