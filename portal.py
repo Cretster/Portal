@@ -345,33 +345,55 @@ def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presen
     fig = go.Figure()
     
     # 1. Primary Left Axis: Temperatures (°C)
-    fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="<b>Day Temp Max (°C)</b>", line=dict(color="#e67e22", width=1.5)))
-    fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="<b>Night Temp Min (°C)</b>", line=dict(color="#3498db", width=1.5)))
+    fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)", line=dict(color="#e67e22", width=1.5)))
+    fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)", line=dict(color="#3498db", width=1.5)))
     
     # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
-    fig.add_trace(go.Bar(x=dates, y=rain, name="<b>Daily Rain (mm)</b>", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="<b>⚡ ACTIVE NEW GROWTH %</b>", line=dict(color="#e74c3c", width=9, dash="dot"), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="<b>🍄 EXISTING GROWTH FIND %</b>", line=dict(color="#2ecc71", width=9), yaxis="y2"))
-    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="<b>💧 Avg Air Humidity (%)</b>", line=dict(color="#1abc9c", width=6, dash="dash"), yaxis="y2"))
+    fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ New Growth %", line=dict(color="#e74c3c", width=9, dash="dot"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 Existing Growth %", line=dict(color="#2ecc71", width=9), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="Humidity (%)", line=dict(color="#1abc9c", width=6, dash="dash"), yaxis="y2"))
     
     # 3. Tertiary Right Axis: Wind Speed (knots)
-    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="<b>💨 Peak Wind (knots)</b>", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
+    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="Peak Wind (kn)", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
 
+    # Short title + legend at bottom avoids overlap on mobile
+    short_name = species_name.replace("😁 ", "").replace("🍄 ", "")
     fig.update_layout(
-        title=f"Growth Mapping Trends.  The main green and dotted red lines are the ones to focus on for showing growth chances ~— {species_name}",
-        xaxis=dict(title="Timeline Window", domain=[0, 0.85]),
-        yaxis=dict(title="Temperature Range (°C)", side="left"),
+        title=dict(
+            text=f"Growth trends — focus on green & dotted red lines<br><sup>{short_name}</sup>",
+            x=0.5,
+            xanchor="center",
+            font=dict(size=14),
+        ),
+        xaxis=dict(title="Timeline", domain=[0, 0.82]),
+        yaxis=dict(title="Temp (°C)", side="left"),
         yaxis2=dict(
-            title="Probability / Moisture Volume Index (%) / Rain (mm)",
+            title="Score % / Rain (mm)",
             overlaying="y", side="right", range=[0, 105]
         ),
         yaxis3=dict(
-            title="Wind Velocity (knots)",
-            overlaying="y", side="right", anchor="free", position=0.93
+            title="Wind (kn)",
+            overlaying="y", side="right", anchor="free", position=0.92
         ),
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        height=550,
+        # "x" keeps a single vertical guide; tooltip is smaller than "x unified"
+        hovermode="x",
+        hoverlabel=dict(
+            bgcolor="rgba(255,255,255,0.95)",
+            font_size=12,
+            namelength=-1,
+            align="left",
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11),
+        ),
+        margin=dict(t=60, b=100, l=50, r=60),
+        height=520,
     )
     return fig
 
@@ -659,36 +681,50 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
-# 8. Regional Discovery Macro Scanning Engine
+# 8. Regional Discovery Macro Scanning Engine (on-demand — does not block top content)
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.subheader("🤔 Island-wide High-Probability Macro Spatial Samples")
-st.caption("Scans coordinates around the Isle of Man matching target geochemical profiles to filter regions showing high presence.")
+st.caption(
+    "Optional scan of the island for other spots matching the selected species’ soil/weather profile. "
+    "This is slower, so it only runs when you ask for it — the scores and graph above load first."
+)
 
-sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
-if len(sample_pts) > 40:
-    step = max(1, len(sample_pts) // 40)
-    sample_pts = sample_pts[::step]
+run_scan = st.button("Run island-wide scan", type="primary", use_container_width=True)
 
-viable_spots = []
-if sample_pts:
-    with st.spinner("Computing regional presence algorithms across spatial vectors..."):
-        for pt in sample_pts:
+if run_scan:
+    sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
+    if len(sample_pts) > 40:
+        step = max(1, len(sample_pts) // 40)
+        sample_pts = sample_pts[::step]
+
+    viable_spots = []
+    if sample_pts:
+        progress = st.progress(0, text="Scanning island locations…")
+        for i, pt in enumerate(sample_pts):
             try:
                 w = fetch_live_weather(pt["lat"], pt["lon"])
                 b, _ = get_elevation_bonus(pt["lat"], pt["lon"])
-                sc, _, _ = calculate_growth_and_presence_scores(w["day_temp"], w["night_temp"], w["lagged_rain_score"], w["avg_humidity_48h"], w["max_wind_24h"], w["had_frost"], b, rules, pt["ph"])
+                sc, _, _ = calculate_growth_and_presence_scores(
+                    w["day_temp"], w["night_temp"], w["lagged_rain_score"],
+                    w["avg_humidity_48h"], w["max_wind_24h"], w["had_frost"],
+                    b, rules, pt["ph"]
+                )
                 if sc >= 45:
                     viable_spots.append({**pt, "score": sc, "elevation": b * 55})
-            except:
-                continue
-                
-if viable_spots:
-    gmap = build_growth_conditions_map(viable_spots, zoom=10)
-    st_folium(gmap, width=None, height=450, returned_objects=[], key="iom_regional_discovery_canvas")
-    st.success(f"Discovered **{len(viable_spots)}** highly prospective search corridors within target parameters across the island.")
+            except Exception:
+                pass
+            progress.progress((i + 1) / len(sample_pts), text=f"Scanning… {i+1}/{len(sample_pts)}")
+        progress.empty()
+
+    if viable_spots:
+        gmap = build_growth_conditions_map(viable_spots, zoom=10)
+        st_folium(gmap, width=None, height=450, returned_objects=[], key="iom_regional_discovery_canvas")
+        st.success(f"Discovered **{len(viable_spots)}** highly prospective search corridors within target parameters across the island.")
+    else:
+        st.warning("No high-probability zones currently verified island-wide within target chemical profiles.")
 else:
-    st.warning("No high-probability zones currently verified island-wide within target chemical profiles.")
+    st.info("Tap **Run island-wide scan** when you want to search other locations. The main scores and graph above are already up to date.")
 
 # ---------------------------------------------------------------------------
 # 9. Manual Sandbox Adjustments Controls (Placed at Bottom)
