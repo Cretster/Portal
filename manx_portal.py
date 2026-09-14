@@ -477,9 +477,9 @@ with st.container(gap=1):
     st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
     st.text("7: Nothing.")
     st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
-    st.text("8- Finally there's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
+    st.text("8- I lied.  This is the last bit really.  Sort of anyway.  There's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
 st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest them towards Dr Pablo, claim number 69 really loudly, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
-st.caption("IMPORTANT!  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")           
+st.caption("**IMPORTANT!**  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")           
 st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for zoom that stays after adding pin.")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
