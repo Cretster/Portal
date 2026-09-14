@@ -466,8 +466,8 @@ if "boom_trigger" not in st.session_state:
 st.title("🍄 Dr Pablo's Mushroom Magic")
 # st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
-st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.  If it's a cool or amusing idea I might do it, but if your suggestion makes me feel that I'd rather shit in my hands and then clap, well... maybe not.")
-st.markdown("**HOW TO USE: (TLDR: Basically zoom into the map, click somewhere, read the cool shit that appears below the map. If you're older than 6, or can tie shoelaces then hopefully it's all self explanatory.) **")
+st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.  If it's a cool or amusing idea I might do it, but if your suggestion makes me feel that I'd rather shit in my hands and clap, well... maybe not.")
+st.markdown("**HOW TO USE: (TLDR: Basically zoom into the map, click somewhere, read the cool shit that appears below the map. If you're older than 6, or can tie shoelaces then hopefully it's all self explanatory.)**")
 with st.container(gap=1):
     st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
     st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH for that spot.")
@@ -479,8 +479,8 @@ with st.container(gap=1):
     st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
     st.text("8- Finally there's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
 st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest them towards Dr Pablo, claim number 69 really loudly, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
-           
-st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
+st.caption("IMPORTANT!  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")           
+st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for zoom that stays after adding pin.")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
 
