@@ -1,9 +1,3 @@
-#st.title("🍄 Dr Pablo's Mushroom Magic!")
-#st.header("🍄 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
-#st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
-#st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down.  Yes I know the big squares of colour are a bit wank looking, but what do you want?   A fucking refund? 🤣🖕")
-
-
 import streamlit as st
 import requests
 import re
@@ -17,8 +11,40 @@ from streamlit_folium import st_folium
 from folium.raster_layers import ImageOverlay
 
 # ---------------------------------------------------------------------------
-# Soil pH grid (local JSON produced from SoilGrids 0-5 cm mean)
-# Place iom_ph_grid.json and iom_ph_overlay.png next to this script.
+# 1. Target Species Parameter Matrix
+# ---------------------------------------------------------------------------
+SPECIES_MATRIX = {
+    "🍄 'Liberty Cap' (Psilocybe semilanceata)": {
+        "day_min": 10.0, "day_max": 17.0,          # daily max; ideal centre ~14 °C
+        "night_min": 6.5, "night_max": 11.5,        # daily min; ideal centre ~9 °C
+        "rain_trigger": 15.0,       
+        "frost_kill": True,
+        "preferred_ph_min": 4.0, "preferred_ph_max": 6.0,  # aligns with data-driven 4.0–6.0
+        "wind_tolerance": 13.0,     
+        "fruiting_months": (9, 10, 11, 12), 
+        "decay_days": 3,
+        "ideal_day": 14.0,
+        "ideal_night": 9.0,
+        "max_diurnal": 6.5
+    },  
+    "😁 'Field Mushroom' (Agaricus campestris)": {
+        "day_min": 12.0, "day_max": 18.0,
+        "night_min": 7.0, "night_max": 12.0,
+        "rain_trigger": 12.0,       
+        "frost_kill": True,
+        "preferred_ph_min": 6.5, "preferred_ph_max": 7.5,
+        "wind_tolerance": 22.0,     
+        "fruiting_months": (8, 9, 10), 
+        "decay_days": 5,
+        "ideal_day": 15.0,
+        "ideal_night": 9.5,
+        "max_diurnal": 8.0
+    }
+
+}
+
+# ---------------------------------------------------------------------------
+# 2. Soil pH Grid Handlers
 # ---------------------------------------------------------------------------
 @st.cache_data
 def load_ph_grid():
@@ -31,15 +57,12 @@ def load_ph_grid():
         if p.exists():
             with p.open() as f:
                 data = json.load(f)
-            # support either key name from different exports
             if "ph_grid" not in data and "grid" in data:
                 data["ph_grid"] = data["grid"]
             return data
     return None
 
-
 def sample_ph(lat, lon, grid_meta):
-    """Return predicted pH (float) or None if outside raster / nodata."""
     if grid_meta is None:
         return None
     west, south = grid_meta["west"], grid_meta["south"]
@@ -56,23 +79,21 @@ def sample_ph(lat, lon, grid_meta):
         return None
     return ph_grid[y][x]
 
-
 def ph_legend_html(ph_value=None):
-    """Prominent legend + large pH readout for the selected point."""
     rows = [
-        ("#d73027", "< 5.0", "ACIEEEEED!!!"),
-        ("#fc8d59", "5.0 – 5.5", "Moderately acid (near optimal)"),
-        ("#fee08b", "5.5 – 6.0", "Slightly acid (GREAT!)"),
-        ("#d9ef8b", "6.0 – 6.5", "Near-neutral (near optimal)"),
-        ("#91cf60", "6.5 – 7.0", "Slightly alkaline (like Duracell)"),
-        ("#1a9850", "> 7.0", "Alkaline (like bleach)"),
+        ("#d73027", "< 5.0", "Highly Acidic"),
+        ("#fc8d59", "5.0 – 5.5", "Moderately Acidic (Optimal for Liberty Caps)"),
+        ("#fee08b", "5.5 – 6.0", "Slightly Acidic (Excellent for Liberty Caps)"),
+        ("#d9ef8b", "6.0 – 6.5", "Near-Neutral (Good crossover zone)"),
+        ("#91cf60", "6.5 – 7.0", "Slightly Alkaline (Good for Field Mushrooms)"),
+        ("#1a9850", "> 7.0", "Alkaline (Optimal for Field Mushrooms)"),
     ]
     parts = [
         '<div style="font-size:14px;line-height:1.55;'
         'padding:12px 14px;background:#f7f9fb;border:1px solid #d0d7de;'
         'border-radius:8px;margin:8px 0 16px 0">'
     ]
-    parts.append("<b style='font-size:15px'>Soil pH (0–5 cm) — SoilGrids prediction</b><br><br>")
+    parts.append("<b style='font-size:15px'>Soil pH (0–5 cm) — Ground Suitability</b><br><br>")
     for colour, rng, desc in rows:
         parts.append(
             f'<span style="display:inline-block;width:20px;height:14px;'
@@ -84,438 +105,366 @@ def ph_legend_html(ph_value=None):
         parts.append(
             '<div style="margin-top:14px;padding:12px 14px;background:#e8f4fc;'
             'border-left:5px solid #1a5276;border-radius:4px">'
-            '<div style="font-size:28px;font-weight:700;color:#555;margin-bottom:2px">'
-            "Chosen Location Soil pH:</div>"
+            '<div style="font-size:24px;font-weight:700;color:#555;margin-bottom:2px">'
+            "Selected Soil pH:</div>"
             f'<div style="font-size:28px;font-weight:700;color:#1a5276;'
             f'letter-spacing:0.02em">pH ≈ {ph_value:.1f}</div>'
             "</div>"
         )
     else:
-        parts.append(
-            '<div style="margin-top:12px;color:#666;font-size:13px">'
-            "Click the map to read pH at that point.</div>"
-        )
-    parts.append(
-        '<div style="margin-top:10px;font-size:11px;color:#666">'
-        "Model estimates at ~250 m resolution (ISRIC SoilGrids), smoothly interpolated for display. "
-        "Most of the Isle of Man falls in the acid to near-neutral range.</div>"
-    )
+        parts.append('<div style="margin-top:12px;color:#666;font-size:13px">Click the map to check localized soil pH suitability.</div>')
     parts.append("</div>")
     return "".join(parts)
-
-
-# 1. Species Parameter Matrix
-SPECIES_MATRIX = {
-    "😁 'Field Mushroom' (Agaricus campestris)": {
-        "day_min": 8, "day_max": 14,
-        "night_min": 5, "night_max": 9,
-        "rain_trigger": 12, "frost_kill": True,
-    },
-}
-
-
-# 2. Isle of Man Geographic Database
-IOM_POSTCODE_DB = {
-    "IM1": {"name": "Douglas / Onchan", "lat": 54.15, "lon": -4.48, "upland_offset": 0},
-    "IM2": {"name": "Douglas Outskirts", "lat": 54.16, "lon": -4.51, "upland_offset": 1},
-    "IM3": {"name": "Onchan Rural", "lat": 54.18, "lon": -4.45, "upland_offset": 1},
-    "IM4": {"name": "Middle / Baldwin / Marown (High Uplands)", "lat": 54.20, "lon": -4.55, "upland_offset": 4},
-    "IM5": {"name": "Peel / German / Patrick", "lat": 54.22, "lon": -4.67, "upland_offset": 2},
-    "IM6": {"name": "Kirk Michael", "lat": 54.28, "lon": -4.59, "upland_offset": 2},
-    "IM7": {"name": "Ramsey / Andreas / Jurby", "lat": 54.32, "lon": -4.40, "upland_offset": 0},
-    "IM8": {"name": "Ramsey Town", "lat": 54.32, "lon": -4.38, "upland_offset": 0},
-    "IM9": {"name": "Castletown / Ballasalla / Port Erin", "lat": 54.08, "lon": -4.63, "upland_offset": 1},
-}
-
-
+# ---------------------------------------------------------------------------
+# 3. Weather API Processing Engine (Calibrated Unit Alignment)
+# ---------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_live_weather(lat, lon):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m,precipitation",
-        "past_days": 2,
+        "hourly": "temperature_2m,precipitation,relative_humidity_2m,wind_speed_10m",
+        "past_days": 5, 
         "forecast_days": 1,
+        "wind_speed_unit": "kn",
         "timezone": "auto",
     }
-    resp = requests.get(url, params=params, timeout=10)
+    resp = requests.get(url, params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
-    temps = data["hourly"]["temperature_2m"]
-    precip = data["hourly"]["precipitation"]
-    times = data["hourly"]["time"]
+    hourly = data["hourly"]
+    temps = hourly["temperature_2m"]
+    precip = hourly["precipitation"]
+    humidity = hourly["relative_humidity_2m"]
+    wind = hourly["wind_speed_10m"]
+    times = hourly["time"]
 
     now = datetime.fromisoformat(times[-1])
+    
     cutoff_24h = now - timedelta(hours=24)
     cutoff_48h = now - timedelta(hours=48)
+    
+    last_24h_temps = [t for tm, t in zip(times, temps) if datetime.fromisoformat(tm) >= cutoff_24h]
+    last_48h_precip = [p for tm, p in zip(times, precip) if datetime.fromisoformat(tm) >= cutoff_48h]
+    last_48h_rh = [h for tm, h in zip(times, humidity) if datetime.fromisoformat(tm) >= cutoff_48h]
+    last_24h_wind = [w for tm, w in zip(times, wind) if datetime.fromisoformat(tm) >= cutoff_24h]
 
-    last_24h = [(t, temp) for t, temp in zip(times, temps) if datetime.fromisoformat(t) >= cutoff_24h]
-    last_48h_precip = [p for t, p in zip(times, precip) if datetime.fromisoformat(t) >= cutoff_48h]
+    lagged_rain = 0
+    weights = [0.35, 0.25, 0.15, 0.15, 0.10]
+    for idx, w in enumerate(weights):
+        start = now - timedelta(days=idx+1)
+        end = now - timedelta(days=idx)
+        day_precip = sum(p for tm, p in zip(times, precip) if start <= datetime.fromisoformat(tm) < end)
+        lagged_rain += day_precip * w
 
-    day_temp_max = max(v for _, v in last_24h)
-    night_temp_min = min(v for _, v in last_24h)
-    rain_48h = sum(last_48h_precip)
-    had_frost = night_temp_min <= 0
+    if not last_24h_temps:
+        last_24h_temps = temps[-24:] if len(temps) >= 24 else temps
+    if not last_48h_rh:
+        last_48h_rh = humidity[-48:] if len(humidity) >= 48 else humidity
+    if not last_24h_wind:
+        last_24h_wind = wind[-24:] if len(wind) >= 24 else wind
 
     return {
-        "day_temp": round(day_temp_max, 1),
-        "night_temp": round(night_temp_min, 1),
-        "rain_48h": round(rain_48h, 1),
-        "had_frost": had_frost,
+        "day_temp": round(max(last_24h_temps), 1) if last_24h_temps else 10.0,
+        "night_temp": round(min(last_24h_temps), 1) if last_24h_temps else 5.0,
+        "rain_48h": round(sum(last_48h_precip), 1),
+        "lagged_rain_score": round(lagged_rain * 5, 1), 
+        "avg_humidity_48h": round(sum(last_48h_rh) / len(last_48h_rh), 1) if last_48h_rh else 80.0,
+        "max_wind_24h": round(max(last_24h_wind), 1) if last_24h_wind else 5.0,
+        "had_frost": (min(last_24h_temps) <= 0) if last_24h_temps else False
     }
-
-
+    
 @st.cache_data(ttl=1800)
-def fetch_historical_daily(lat, lon, days_back=7, days_forward=3):
+def fetch_historical_daily(lat, lon, days_back=7):
     url = "https://api.open-meteo.com/v1/forecast"
+    
+    clean_days = int(days_back)
+    
     params = {
-        "latitude": lat,
-        "longitude": lon,
+        "latitude": float(lat),
+        "longitude": float(lon),
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
-        "past_days": days_back,
-        "forecast_days": days_forward,
+        "hourly": "relative_humidity_2m,wind_speed_10m",
+        "past_days": clean_days,
+        "forecast_days": 3,
+        "wind_speed_unit": "kn",
         "timezone": "auto",
     }
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()["daily"]
-    return data["time"], data["temperature_2m_max"], data["temperature_2m_min"], data["precipitation_sum"]
+    
+    resp = requests.get(url, params=params, timeout=15)
+    
+    if resp.status_code != 200:
+        raise ValueError(f"Open-Meteo rejected the historical request with Status {resp.status_code}: {resp.text[:200]}")
+        
+    raw = resp.json()
+    if "daily" not in raw or "hourly" not in raw:
+        raise ValueError(f"Unexpected Open-Meteo response structure: {list(raw.keys())}")
+        
+    daily = raw["daily"]
+    
+    h_time = raw["hourly"]["time"]
+    h_rh = raw["hourly"]["relative_humidity_2m"]
+    h_wind = raw["hourly"]["wind_speed_10m"]
+    
+    daily_rh_avg = []
+    daily_wind_max = []
+    
+    for d_str in daily["time"]:
+        day_start = datetime.fromisoformat(d_str)
+        day_end = day_start + timedelta(days=1)
+        
+        rh_sub = [h for t, h in zip(h_time, h_rh) if day_start <= datetime.fromisoformat(t) < day_end]
+        wind_sub = [w for t, w in zip(h_time, h_wind) if day_start <= datetime.fromisoformat(t) < day_end]
+        
+        daily_rh_avg.append(sum(rh_sub)/len(rh_sub) if rh_sub else 80.0)
+        daily_wind_max.append(max(wind_sub) if wind_sub else 5.0)
 
+    return daily["time"], daily["temperature_2m_max"], daily["temperature_2m_min"], daily["precipitation_sum"], daily_rh_avg, daily_wind_max
 
-def score_color(score):
-    if score >= 80:
-        return "#2ecc71"
-    elif score >= 50:
-        return "#f1c40f"
+@st.cache_data(ttl=86400)
+def get_elevation_bonus(lat, lon):
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "daily": "temperature_2m_max",
+            "forecast_days": 1,
+            "timezone": "auto",
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        elev = data.get("elevation", 0)
+        return min(4, int(elev // 55)), elev
+    except Exception:
+        return 0, 0
+
+# ---------------------------------------------------------------------------
+# 4. Biological Algorithm Scoring Logic
+# ---------------------------------------------------------------------------
+def calculate_growth_and_presence_scores(day_temp, night_temp, rain_index, avg_rh, max_wind, has_frost, bonus, rules, selected_ph):
+    current_month = datetime.now().month
+    
+    if current_month not in rules["fruiting_months"]:
+        return 0, {}, "🔴 Suppressed: Outside seasonal fruiting calendar."
+
+    if rules["frost_kill"] and has_frost:
+        return 0, {}, "❄️ Season Terminated: Sub-zero frost destroyed surface structures."
+
+    day_score = 30 if rules["day_min"] <= day_temp <= rules["day_max"] else (10 if (rules["day_min"] - 3) <= day_temp <= (rules["day_max"] + 3) else 0)
+    night_score = 20 if rules["night_min"] <= night_temp <= rules["night_max"] else (5 if (rules["night_min"] - 2) <= night_temp <= (rules["night_max"] + 2) else 0)
+    rain_score = 30 if rain_index >= rules["rain_trigger"] else (15 if rain_index >= (rules["rain_trigger"] / 2) else 0)
+    
+    if avg_rh >= 90:
+        rh_modifier = 1.0
+    elif avg_rh >= 83:
+        rh_modifier = 0.7
+    elif avg_rh >= 75:
+        rh_modifier = 0.3
     else:
-        return "#e74c3c"
+        rh_modifier = 0.05
 
+    wind_penalty = 1.0
+    if max_wind > rules["wind_tolerance"]:
+        diff = max_wind - rules["wind_tolerance"]
+        wind_penalty = max(0.4, 1.0 - (diff * 0.05))
 
-def build_trend_chart(dates, day_max, night_min, rain, scores, species_name):
+    # Day–night temperature swing penalty (smaller swings preferred)
+    diurnal = day_temp - night_temp
+    max_diurnal = rules.get("max_diurnal", 7.0)
+    if diurnal <= max_diurnal:
+        diurnal_penalty = 1.0
+    elif diurnal <= max_diurnal + 2:
+        diurnal_penalty = 0.85
+    else:
+        diurnal_penalty = max(0.5, 1.0 - ((diurnal - max_diurnal) * 0.08))
+
+    ph_modifier = 1.0
+    if selected_ph is not None:
+        if not (rules["preferred_ph_min"] <= selected_ph <= rules["preferred_ph_max"]):
+            dist = min(abs(selected_ph - rules["preferred_ph_min"]), abs(selected_ph - rules["preferred_ph_max"]))
+            ph_modifier = max(0.1, 1.0 - (dist * 0.5))
+
+    base_gpi = day_score + night_score + rain_score + (bonus * 5)
+    final_growth_score = int(min(base_gpi, 100) * rh_modifier * wind_penalty * diurnal_penalty * ph_modifier)
+
+    if final_growth_score >= 75:
+        verdict = "🟩 EXCELLENT: Ideal environmental alignment. Spontaneous fruiting likely."
+    elif final_growth_score >= 45:
+        verdict = "🟨 MODERATE: Conditional growth. Check unmanaged high-moisture valley points."
+    else:
+        verdict = "🟥 POOR: Unviable micro-climate. New surface eruption suppressed."
+
+    breakdown = {
+        "day": day_score, "night": night_score, "rain": rain_score,
+        "rh_mod": rh_modifier, "wind_pen": wind_penalty,
+        "diurnal_pen": diurnal_penalty, "ph_mod": ph_modifier
+    }
+    return final_growth_score, breakdown, verdict
+
+def generate_decayed_presence_array(growth_scores, decay_span):
+    """Models a time-lagged, decaying persistence index where field presence 
+
+    peaks 1-2 days after an eruption event and decays gradually.
+    """
+    total_days = len(growth_scores)
+    presence_scores = [0] * total_days
+    
+    # Loop through timeline to compute the lagged development index
+    for i in range(total_days):
+        # Scan backward over the last 2 days to check for an eruption trigger window
+        possible_peaks = []
+        
+        # Check if an eruption happened 1 day ago (Mushrooms are half size / button stage)
+        if i >= 1:
+            possible_peaks.append(int(growth_scores[i-1] * 0.75))
+            
+        # Check if an eruption happened 2 days ago (Mushrooms are full size / peak abundance)
+        if i >= 2:
+            possible_peaks.append(int(growth_scores[i-2]))
+            
+        # Find the highest shifted value derived from recent weather triggers
+        implied_peak = max(possible_peaks) if possible_peaks else 0
+        
+        # Let previous day's presence decay naturally according to species lifespan
+        previous_presence = presence_scores[i-1] if i > 0 else 0
+        decay_step = 100 / decay_span
+        natural_decay = max(0, previous_presence - decay_step)
+        
+        # Current day score is either the new mature arrivals or the old decaying ones
+        presence_scores[i] = int(max(implied_peak, natural_decay))
+        
+    return presence_scores
+
+# ---------------------------------------------------------------------------
+# 5. Mapping and Layout Setup
+# ---------------------------------------------------------------------------
+def build_dual_trend_chart(dates, day_max, night_min, rain, growth_array, presence_array, rh_avg, wind_max, species_name):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)",
-        line=dict(color="#e67e22", width=2),
-    ))
-    fig.add_trace(go.Scatter(
-        x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)",
-        line=dict(color="#3498db", width=2),
-    ))
-    fig.add_trace(go.Scatter(
-        x=dates, y=rain, mode="lines+markers", name="Daily Rainfall (mm)",
-        line=dict(color="#9b59b6", width=2), yaxis="y2",
-    ))
+    
+    # 1. Primary Left Axis: Temperatures (°C)
+    fig.add_trace(go.Scatter(x=dates, y=day_max, mode="lines+markers", name="Day Temp Max (°C)", line=dict(color="#e67e22", width=1.5)))
+    fig.add_trace(go.Scatter(x=dates, y=night_min, mode="lines+markers", name="Night Temp Min (°C)", line=dict(color="#3498db", width=1.5)))
+    
+    # 2. Secondary Right Axis: Volume Index / Probabilities (%) & Rain (mm)
+    fig.add_trace(go.Bar(x=dates, y=rain, name="Daily Rain (mm)", marker_color="rgba(155, 89, 182, 0.25)", yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=growth_array, mode="lines", name="⚡ New Growth %", line=dict(color="#e74c3c", width=9, dash="dot"), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=presence_array, mode="lines", name="🍄 Existing Growth %", line=dict(color="#2ecc71", width=9), yaxis="y2"))
+    fig.add_trace(go.Scatter(x=dates, y=rh_avg, mode="lines", name="Humidity (%)", line=dict(color="#1abc9c", width=6, dash="dash"), yaxis="y2"))
+    
+    # 3. Tertiary Right Axis: Wind Speed (knots)
+    fig.add_trace(go.Scatter(x=dates, y=wind_max, mode="lines", name="Peak Wind (kn)", line=dict(color="#7f8c8d", width=1.5, dash="dashdot"), yaxis="y3"))
 
-    first_seg = True
-    for i in range(len(dates) - 1):
-        seg_color = score_color((scores[i] + scores[i + 1]) / 2)
-        fig.add_trace(go.Scatter(
-            x=[dates[i], dates[i + 1]], y=[scores[i], scores[i + 1]],
-            mode="lines", line=dict(color=seg_color, width=6),
-            yaxis="y2", showlegend=first_seg,
-            name="FRUITING PROBABILITY % (thick line - red/yellow/green)",
-            legendgroup="probability", hoverinfo="skip",
-        ))
-        first_seg = False
-    fig.add_trace(go.Scatter(
-        x=dates, y=scores, mode="markers", yaxis="y2",
-        marker=dict(
-            color=[score_color(s) for s in scores],
-            size=9, line=dict(color="white", width=1),
-        ),
-        name="Probability Score", showlegend=False,
-        hovertemplate="%{x}<br>Probability: %{y}%<extra></extra>",
-    ))
-
+    # Short title + legend at bottom avoids overlap on mobile
+    short_name = species_name.replace("😁 ", "").replace("🍄 ", "")
     fig.update_layout(
-        title=f"Weather & Fruiting Probability Trend — {species_name}",
-        xaxis=dict(title="Date"),
-        yaxis=dict(title="Temperature (°C)"),
-        yaxis2=dict(title="Rainfall (mm) / Probability (%)", overlaying="y", side="right"),
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        height=480,
+        title=dict(
+            text=f"Growth trends — focus on green & dotted red lines<br><sup>{short_name}</sup>",
+            x=0.5,
+            xanchor="center",
+            font=dict(size=14),
+        ),
+        xaxis=dict(title="Timeline", domain=[0, 0.82]),
+        yaxis=dict(title="Temp (°C)", side="left"),
+        yaxis2=dict(
+            title="Score % / Rain (mm)",
+            overlaying="y", side="right", range=[0, 105]
+        ),
+        yaxis3=dict(
+            title="Wind (kn)",
+            overlaying="y", side="right", anchor="free", position=0.92
+        ),
+        # "x" keeps a single vertical guide; tooltip is smaller than "x unified"
+        hovermode="x",
+        hoverlabel=dict(
+            bgcolor="rgba(255,255,255,0.95)",
+            font_size=12,
+            namelength=-1,
+            align="left",
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11),
+        ),
+        margin=dict(t=60, b=100, l=50, r=60),
+        height=520,
     )
     return fig
 
 
-def google_maps_link_to_latlon(url):
-    raw_coords = re.match(r"^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$", url)
-    if raw_coords:
-        return float(raw_coords.group(1)), float(raw_coords.group(2))
-
-    patterns = [
-        r"@(-?\d+\.\d+),(-?\d+\.\d+)",
-        r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)",
-        r"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)",
-    ]
-    for pat in patterns:
-        m = re.search(pat, url)
-        if m:
-            return float(m.group(1)), float(m.group(2))
-
-    if "goo.gl" in url:
-        raise ValueError(
-            "Short goo.gl links can't be read directly — open it in a browser once "
-            "and paste the full address-bar URL instead, or paste coordinates "
-            "(e.g. 54.150, -4.480)."
-        )
-    raise ValueError(
-        "Couldn't find coordinates in that link. Try pasting raw coordinates "
-        "instead (e.g. 54.150, -4.480)."
-    )
-
-
-@st.cache_data(ttl=86400)
-def get_elevation_bonus(lat, lon):
-    resp = requests.get(
-        "https://api.open-meteo.com/v1/elevation",
-        params={"latitude": lat, "longitude": lon},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    elevation = resp.json()["elevation"][0]
-    bonus = min(4, int(elevation // 50))
-    return bonus, elevation
-
-
-def calculate_precise_index(day_temp, night_temp, rain_48h, has_had_frost, bonus, s_rules):
-    if s_rules["frost_kill"] and has_had_frost:
-        return 0, "🔴 Season Terminated: Recent ground frost detected.", 0, 0, 0
-
-    day_score = (
-        35 if s_rules["day_min"] <= day_temp <= s_rules["day_max"]
-        else (15 if (s_rules["day_min"] - 4) <= day_temp <= (s_rules["day_max"] + 3) else 0)
-    )
-    night_score = (
-        25 if s_rules["night_min"] <= night_temp <= s_rules["night_max"]
-        else (10 if (s_rules["night_min"] - 4) <= night_temp <= (s_rules["night_max"] + 3) else 0)
-    )
-    rain_score = (
-        40 if rain_48h >= s_rules["rain_trigger"]
-        else (20 if rain_48h >= (s_rules["rain_trigger"] / 2) else 0)
-    )
-
-    total_score = min(day_score + night_score + rain_score + (bonus * 5), 100)
-
-    if total_score >= 80:
-        verdict = "🟩 EXCELLENT: Strong probability of active seasonal growth flushes."
-    elif total_score >= 50:
-        verdict = "🟨 MODERATE: Sporadic growth possible. Check damp, unfertilized slopes."
-    else:
-        verdict = "🟥 POOR: Unviable conditions. Highly unlikely to observe NEW growth right now.  Check the graph for recent conditions and likeliness of recent growth."
-
-    return total_score, verdict, day_score, night_score, rain_score
-
-
-def render_location_map(lat, lon, label):
-    highlight = pdk.Layer(
-        "ScatterplotLayer",
-        data=[{"lat": lat, "lon": lon, "label": label}],
-        get_position="[lon, lat]",
-        get_fill_color="[46, 204, 113, 90]",
-        get_radius=900,
-        pickable=False,
-    )
-    marker = pdk.Layer(
-        "ScatterplotLayer",
-        data=[{"lat": lat, "lon": lon, "label": label}],
-        get_position="[lon, lat]",
-        get_fill_color="[231, 76, 60, 255]",
-        get_radius=70,
-        pickable=True,
-    )
-    view_state = pdk.ViewState(latitude=lat, longitude=lon, zoom=11.5, pitch=0)
-    st.pydeck_chart(pdk.Deck(
-        layers=[highlight, marker],
-        initial_view_state=view_state,
-        tooltip={"text": "{label}"},
-        map_style=None,
-    ))
-
 
 def find_overlay_png():
-    candidates = [
-        Path(__file__).parent / "iom_ph_overlay.png",
-        Path("iom_ph_overlay.png"),
-        Path("/mount/src/portal/iom_ph_overlay.png"),
-    ]
+    candidates = [Path(__file__).parent / "iom_ph_overlay.png", Path("iom_ph_overlay.png"), Path("/mount/src/portal/iom_ph_overlay.png")]
     for p in candidates:
-        if p.exists():
-            return str(p)
+        if p.exists(): return str(p)
     return None
 
-
-def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10,
-                           clicked=None, grid_meta=None, opacity=0.7,
-                           fit_island=False):
-    """
-    Folium map with smoothly upsampled SoilGrids pH image overlay.
-    Falls back to ISRIC WMS if the PNG is missing.
-    The red pin is always drawn from session state so it survives reruns.
-    When fit_island is True (first load only), the view is fitted to IoM bounds;
-    otherwise centre/zoom from the caller are respected so user zoom is kept.
-    """
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=int(zoom),
-        tiles="OpenStreetMap",
-    )
+def build_clickable_ph_map(center_lat=54.23, center_lon=-4.55, zoom=10, clicked=None, grid_meta=None, opacity=0.7, fit_island=False):
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=int(zoom), tiles="OpenStreetMap")
     if fit_island:
         m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
 
     png = find_overlay_png()
     if png and grid_meta:
         ImageOverlay(
-            name="Soil pH 0–5 cm",
-            image=png,
-            bounds=[
-                [grid_meta["south"], grid_meta["west"]],
-                [grid_meta["north"], grid_meta["east"]],
-            ],
-            opacity=float(opacity),
-            interactive=False,
-            cross_origin=False,
+            name="Soil pH 0–5 cm", image=png,
+            bounds=[[grid_meta["south"], grid_meta["west"]], [grid_meta["north"], grid_meta["east"]]],
+            opacity=float(opacity), interactive=False, cross_origin=False,
         ).add_to(m)
-    else:
-        folium.raster_layers.WmsTileLayer(
-            url="https://maps.isric.org/mapserv?map=/map/phh2o.map",
-            layers="phh2o_0-5cm_mean",
-            name="Soil pH 0–5 cm (SoilGrids WMS)",
-            fmt="image/png",
-            transparent=True,
-            opacity=float(opacity),
-            version="1.3.0",
-            attr="SoilGrids / ISRIC (CC-BY 4.0)",
-        ).add_to(m)
-
-    # Always draw the pin from session state so it stays until the next click
+    
     if clicked and clicked.get("lat") is not None:
-        popup_html = f"{clicked['lat']:.5f}, {clicked['lon']:.5f}"
+        popup_html = f"Lat: {clicked['lat']:.4f}, Lon: {clicked['lon']:.4f}"
         if clicked.get("ph") is not None:
             popup_html += f"<br><b>pH ≈ {clicked['ph']:.1f}</b>"
-        folium.Marker(
-            [clicked["lat"], clicked["lon"]],
-            popup=popup_html,
-            tooltip="Selected location",
-            icon=folium.Icon(color="red", icon="map-marker", prefix="glyphicon"),
-        ).add_to(m)
-
+        folium.Marker([clicked["lat"], clicked["lon"]], popup=popup_html, icon=folium.Icon(color="red")).add_to(m)
     return m
 
-
-
-
-def ph_focus_sample_points(grid_meta, ph_min=6.0, ph_max=8.0, stride=4):
-    """
-    Sample lat/lon points from the pH grid where ph_min <= pH <= ph_max.
-    stride>1 thins the grid so weather API calls stay reasonable.
-    """
-    if grid_meta is None:
-        return []
+def ph_focus_sample_points(grid_meta, ph_min=5.0, ph_max=7.5, stride=4):
+    if grid_meta is None: return []
     ph_grid = grid_meta.get("ph_grid") or grid_meta.get("grid")
-    if not ph_grid:
-        return []
-    west, south = grid_meta["west"], grid_meta["south"]
-    east, north = grid_meta["east"], grid_meta["north"]
+    if not ph_grid: return []
+    west, south, east, north = grid_meta["west"], grid_meta["south"], grid_meta["east"], grid_meta["north"]
     width, height = grid_meta["width"], grid_meta["height"]
     points = []
     for y in range(0, height, stride):
         for x in range(0, width, stride):
             ph = ph_grid[y][x]
-            if ph is None:
-                continue
-            if ph_min <= ph <= ph_max:
+            if ph and ph_min <= ph <= ph_max:
                 lat = north - (y + 0.5) / height * (north - south)
                 lon = west + (x + 0.5) / width * (east - west)
                 points.append({"lat": lat, "lon": lon, "ph": ph})
     return points
 
-
-@st.cache_data(ttl=1800, show_spinner=False)
-def score_point_for_growth(lat, lon, species_key):
-    """Live weather + elevation → fruiting probability for one sample point."""
-    rules = SPECIES_MATRIX[species_key]
-    try:
-        weather = fetch_live_weather(lat, lon)
-        bonus, elev = get_elevation_bonus(lat, lon)
-        score, verdict, _, _, _ = calculate_precise_index(
-            weather["day_temp"], weather["night_temp"], weather["rain_48h"],
-            weather["had_frost"], bonus, rules,
-        )
-        return {
-            "score": score,
-            "verdict": verdict,
-            "day_temp": weather["day_temp"],
-            "night_temp": weather["night_temp"],
-            "rain_48h": weather["rain_48h"],
-            "frost": weather["had_frost"],
-            "elevation": elev,
-            "bonus": bonus,
-        }
-    except Exception as e:
-        return {"score": None, "error": str(e)}
-
-
 def build_growth_conditions_map(points_with_scores, zoom=10):
-    """Folium map: coloured circles for growth probability (pH 6–8 areas only)."""
-    m = folium.Map(
-        location=[54.23, -4.55],
-        zoom_start=zoom,
-        tiles="OpenStreetMap",
-    )
+    m = folium.Map(location=[54.23, -4.55], zoom_start=zoom, tiles="OpenStreetMap")
     m.fit_bounds([[54.04, -4.85], [54.43, -4.30]])
-
     for pt in points_with_scores:
         score = pt.get("score")
-        if score is None:
-            continue
-        colour = score_color(score)
-        popup = (
-            f"<b>Growth score: {score}%</b><br>"
-            f"pH ≈ {pt['ph']:.1f}<br>"
-            f"Day {pt.get('day_temp', '—')}°C / Night {pt.get('night_temp', '—')}°C<br>"
-            f"Rain 48h: {pt.get('rain_48h', '—')} mm<br>"
-            f"{pt.get('lat', 0):.4f}, {pt.get('lon', 0):.4f}"
-        )
+        colour = "#2ecc71" if score >= 75 else "#f1c40f"
+        popup = f"<b>Lingering Presence: {score}%</b><br>Soil pH: {pt['ph']:.1f}<br>Elev: {int(pt.get('elevation',0))}m"
         folium.CircleMarker(
-            location=[pt["lat"], pt["lon"]],
-            radius=9,
-            color=colour,
-            weight=1,
-            fill=True,
-            fill_color=colour,
-            fill_opacity=0.75,
-            popup=folium.Popup(popup, max_width=260),
-            tooltip=f"{score}% · pH {pt['ph']:.1f}",
+            location=[pt["lat"], pt["lon"]], radius=8, color=colour, weight=1,
+            fill=True, fill_color=colour, fill_opacity=0.75, popup=folium.Popup(popup, max_width=200)
         ).add_to(m)
-
-    # Simple legend as HTML under the map (rendered in Streamlit)
     return m
 
+# ---------------------------------------------------------------------------
+# 6. Streamlit Frontend Mounting
+# ---------------------------------------------------------------------------
+st.set_page_config(page_title="Dr Pablo's Mushroom Logic Model", page_icon="🍄", layout="wide")
 
-def growth_map_legend_html():
-    return (
-        '<div style="font-size:13px;line-height:1.5;padding:10px 12px;'
-        'background:#f7f9fb;border:1px solid #d0d7de;border-radius:8px;margin-top:8px">'
-        "<b>Areas worth checking</b> (score ≥50%, pH 5.0–6.5)<br>"
-        '<span style="display:inline-block;width:14px;height:14px;background:#2ecc71;'
-        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
-        "🟢 ≥80% excellent &nbsp;&nbsp;"
-        '<span style="display:inline-block;width:14px;height:14px;background:#f1c40f;'
-        'border-radius:50%;margin-right:6px;vertical-align:middle"></span>'
-        "🟡 50–79% moderate<br>"
-        '<span style="font-size:11px;color:#666">Poor (&lt;50%) samples are hidden. '
-        "Colours use live Open-Meteo weather + the same scoring model as the scorecard. "
-        "Denser sampled grid (not every 250 m cell) for practical API use.</span>"
-        "</div>"
-    )
+if "boom_trigger" not in st.session_state:
+    st.session_state.boom_trigger = 0
 
-# --- FRONTEND ---
-st.set_page_config(page_title="Dr Pablo's Mushroom Magic!", page_icon="🍄", layout="wide")
-st.title("🍄 Dr Pablo's Mushroom Magic!")
+st.title("🍄 Dr Pablo's Mushroom Magic")
+st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
 st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.")
 st.markdown("**HOW TO USE:**")
@@ -527,478 +476,515 @@ with st.container(gap=1):
     st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear trend, including a few days aheasd.")
     st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
     st.text("7: Nothing.")
-    st.text("8- Finally there is a second map which shows random samples of places which currently have a moderate to high chance of growth at the moment.")
     st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
-st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
+    st.text("8- Finally there's a fucking huge red button to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
+st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest towards Dr Pablo, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
            
 st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for a zoom that stays after adding pin.")
-st.caption("🍄 Click (possibly twice) to pin the map where you want to check growth conditions, then scroll down for growth probability info below")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
-if "map_click" not in st.session_state:
-    st.session_state.map_click = None  # {"lat", "lon", "ph"}
-if "map_view" not in st.session_state:
-    # centre + zoom remembered across clicks so the map does not jump
-    st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
-if "ph_opacity" not in st.session_state:
-    st.session_state.ph_opacity = 0.70
-if "map_initialized" not in st.session_state:
-    st.session_state.map_initialized = False
-if "map_version" not in st.session_state:
-    st.session_state.map_version = 0
-if "handled_click_id" not in st.session_state:
-    st.session_state.handled_click_id = None
+
+
+
+# ACME-style cartoon bomb easter egg — centred modal on top of everything
+_BOMB_HTML = """
+<div style="width:100%;padding:28px 12px 20px 12px;
+            background:linear-gradient(180deg,#1a1a2e 0%,#16213e 100%);
+            border-radius:14px;text-align:center;overflow:hidden;">
+  <div style="font-size:92px;display:inline-block;position:relative;
+              animation:fizz 1.8s ease-in forwards;
+              filter:drop-shadow(0 8px 20px rgba(255,100,0,0.45));">
+    💣
+    <span style="position:absolute;top:-16px;left:62%;font-size:26px;
+                 animation:spark 0.2s linear infinite;">✨</span>
+  </div>
+  <div style="font-size:110px;margin-top:-16px;opacity:0;
+              animation:boom 1.1s ease-out 1.65s forwards;">💥</div>
+  <div style="font-family:'Comic Sans MS',cursive,sans-serif;font-size:32px;font-weight:bold;
+              color:#ffec99;text-shadow:3px 3px 0 #000, -1px -1px 0 #c00;
+              margin-top:6px;opacity:0;animation:label 0.8s ease-out 1.8s forwards;">
+    BRGH!!!!!
+  </div>
+  <div style="color:#aaa;font-size:12px;margin-top:14px;opacity:0.75;">
+    (ACME Corporation accepts no responsibility for missing mushrooms)
+  </div>
+</div>
+<style>
+  @keyframes fizz {
+    0%   { transform: scale(1) rotate(0deg); }
+    20%  { transform: scale(1.12) rotate(-12deg); }
+    40%  { transform: scale(1.22) rotate(10deg); }
+    60%  { transform: scale(1.35) rotate(-6deg); }
+    80%  { transform: scale(1.5) rotate(4deg); }
+    100% { transform: scale(1.7) rotate(0deg); opacity:0; }
+  }
+  @keyframes spark {
+    0%   { opacity:1; transform: scale(1) translateY(0); }
+    100% { opacity:0.15; transform: scale(1.6) translateY(-10px); }
+  }
+  @keyframes boom {
+    0%   { opacity:0; transform: scale(0.15); }
+    30%  { opacity:1; transform: scale(1.9); }
+    100% { opacity:0; transform: scale(2.8); }
+  }
+  @keyframes label {
+    0%   { opacity:0; transform: scale(0.4); }
+    35%  { opacity:1; transform: scale(1.25); }
+    100% { opacity:0.85; transform: scale(1); }
+  }
+</style>
+"""
+
+if st.session_state.boom_trigger > 0:
+    # One-shot: clear the flag immediately so closing via X (or a later map click)
+    # cannot re-open the animation. The dialog still appears on this run.
+    st.session_state.boom_trigger = 0
+
+    try:
+        @st.dialog("💣 ACME Special", width="large")
+        def _acme_boom_dialog():
+            st.markdown(_BOMB_HTML, unsafe_allow_html=True)
+            st.caption("Animation plays automatically. Close when you’re done.")
+            if st.button("Close", use_container_width=True, type="primary"):
+                st.rerun()  # forces the dialog to dismiss
+        _acme_boom_dialog()
+    except Exception:
+        # Fallback for older Streamlit: banner + explicit close button
+        st.markdown(_BOMB_HTML, unsafe_allow_html=True)
+        if st.button("Close ACME demonstration", use_container_width=True):
+            st.rerun()
+
+if "map_click" not in st.session_state: st.session_state.map_click = None
+if "map_view" not in st.session_state: st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
+if "ph_opacity" not in st.session_state: st.session_state.ph_opacity = 0.65
+if "map_initialized" not in st.session_state: st.session_state.map_initialized = False
+if "map_version" not in st.session_state: st.session_state.map_version = 0
+if "handled_click_id" not in st.session_state: st.session_state.handled_click_id = None
+if "today_new_growth" not in st.session_state: st.session_state.today_new_growth = None
+if "today_existing_presence" not in st.session_state: st.session_state.today_existing_presence = None
+if "today_date_label" not in st.session_state: st.session_state.today_date_label = "today"
 
 ph_grid = load_ph_grid()
 
-st.sidebar.header("Target Organism Matrix")
-selected_species = st.sidebar.selectbox("Select Target Variety:", list(SPECIES_MATRIX.keys()))
+st.sidebar.header("Target Biological Profile")
+selected_species = st.sidebar.selectbox("Select Fungal Variety to Map:", list(SPECIES_MATRIX.keys()))
 rules = SPECIES_MATRIX[selected_species]
 
 st.sidebar.markdown("---")
-st.sidebar.header("Navigation Panel")
-app_mode = st.sidebar.radio(
-    "Go to view:",
-    ["📍 Hyperlocal Focused Zone", "⚖️ 3-Zone Head-to-Head Compare"],
+st.sidebar.info("📌 **Target Matrix Info:**\nField Mushrooms require neutral-alkaline fields. Liberty Caps require undisturbed acidic pasture zones and collapse under fast drying wind profiles.")
+
+st.sidebar.header("Map Adjustments")
+st.session_state.ph_opacity = st.sidebar.slider(
+    "Soil pH overlay opacity", min_value=0.0, max_value=1.0,
+    value=float(st.session_state.ph_opacity), step=0.05
 )
 
-# ==========================================
-# VIEW A: HYPERLOCAL FOCUSED ZONE VIEW
-# ==========================================
-if app_mode == "📍 Hyperlocal Focused Zone":
-    st.sidebar.markdown("---")
-    st.sidebar.header("Location Source")
-    location_mode = st.sidebar.radio(
-        "Specify location by:",
-        ["🗺️ Click on soil-pH map", "📮 Postcode Zone", "🔗 Google Maps Link / coords"],
+# --- tiny ACME bomb easter egg ---
+if st.sidebar.button("💣", help="Do not press"):
+    st.session_state.boom_trigger += 1
+    st.rerun()
+
+# Render Map Canvas Focus Tweaks Controls
+zc1, zc2, zc3, zc4 = st.columns(4)
+with zc1:
+    if st.button("🔍−", use_container_width=True):
+        st.session_state.map_view["zoom"] = max(8, int(st.session_state.map_view["zoom"]) - 1)
+        st.session_state.map_initialized = True
+with zc2:
+    if st.button("Reset View (Island Focus)", use_container_width=True):
+        st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
+        st.session_state.map_initialized = False
+with zc3:
+    if st.button("🔍+", use_container_width=True):
+        st.session_state.map_view["zoom"] = min(16, int(st.session_state.map_view["zoom"]) + 1)
+        st.session_state.map_initialized = True
+with zc4:
+    st.caption(f"Map Canvas Zoom Context Level: **{int(st.session_state.map_view['zoom'])}**")
+
+view = st.session_state.map_view
+fit_island = not st.session_state.map_initialized
+
+fmap = build_clickable_ph_map(
+    view["lat"], view["lon"], int(view["zoom"]),
+    st.session_state.map_click, ph_grid,
+    opacity=float(st.session_state.ph_opacity), fit_island=fit_island
+)
+
+map_data = st_folium(
+    fmap, width=None, height=480,
+    returned_objects=["last_clicked"],
+    key=f"iom_ph_map_v{st.session_state.map_version}"
+)
+
+if map_data and map_data.get("last_clicked"):
+    lat = float(map_data["last_clicked"]["lat"])
+    lon = float(map_data["last_clicked"]["lng"])
+    click_id = (round(lat, 4), round(lon, 4))
+    if st.session_state.handled_click_id != click_id:
+        ph = sample_ph(lat, lon, ph_grid)
+        st.session_state.map_click = {"lat": lat, "lon": lon, "ph": ph}
+        st.session_state.map_view["lat"] = lat
+        st.session_state.map_view["lon"] = lon
+        st.session_state.map_initialized = True
+        st.session_state.handled_click_id = click_id
+        st.session_state.map_version += 1
+        st.rerun()
+
+current_ph = st.session_state.map_click.get("ph") if st.session_state.map_click else None
+st.markdown(ph_legend_html(current_ph), unsafe_allow_html=True)
+
+if not st.session_state.map_click:
+    st.info("👆 Click anywhere inside the Isle of Man boundaries on the map canvas above to load live data.")
+    st.stop()
+
+lat = st.session_state.map_click["lat"]
+lon = st.session_state.map_click["lon"]
+bonus, elevation = get_elevation_bonus(lat, lon)
+
+score_placeholder = st.container()
+# ---------------------------------------------------------------------------
+# 7. Trend Visualization Timeline Generation
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.subheader("📈 Growth Probability and Condition Trends")
+st.caption("Plots the immediate eruption switch threshold versus lingering field presence over a rolling window.")
+
+history_days = st.slider("Days of Weather History to include", 7, 30, 9, key="hist_days_slider")
+
+try:
+    dates, h_day, h_night, h_rain, h_rh, h_wind = fetch_historical_daily(lat, lon, days_back=history_days)
+    
+    historical_growth_stream = []
+    for i in range(len(dates)):
+        h_rain_index = sum(h_rain[max(0, i-j)] * w for j, w in enumerate([0.35, 0.25, 0.15, 0.15, 0.10])) * 5
+        h_frost = h_night[i] <= 0
+        
+        g_sc, _, _ = calculate_growth_and_presence_scores(
+            h_day[i], h_night[i], h_rain_index, h_rh[i], h_wind[i], h_frost, bonus, rules, current_ph
+        )
+        historical_growth_stream.append(g_sc)
+        
+    historical_presence_stream = generate_decayed_presence_array(historical_growth_stream, rules["decay_days"])
+    
+    # Find the index that corresponds to *today* (not a future forecast day)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_idx = None
+    for i, d in enumerate(dates):
+        # dates come as "YYYY-MM-DD"
+        if str(d)[:10] == today_str:
+            today_idx = i
+            break
+    # Fallback: if exact today is missing, take the last non-future day
+    if today_idx is None:
+        for i in range(len(dates) - 1, -1, -1):
+            if str(dates[i])[:10] <= today_str:
+                today_idx = i
+                break
+    if today_idx is None:
+        today_idx = max(0, len(dates) - 4)  # safety: avoid pure forecast end
+
+    st.session_state["today_new_growth"] = int(historical_growth_stream[today_idx])
+    st.session_state["today_existing_presence"] = int(historical_presence_stream[today_idx])
+    st.session_state["today_date_label"] = str(dates[today_idx])[:10]
+    
+    # Clean injection passing humidity and wind variables to the chart trace
+    trend_chart = build_dual_trend_chart(
+        dates, h_day, h_night, h_rain, historical_growth_stream, 
+        historical_presence_stream, h_rh, h_wind, selected_species
+    )
+    st.plotly_chart(trend_chart, use_container_width=True)
+    st.info("💡 **How to interpret the trend chart:** The dotted Red line shows spikes when conditions were perfect for *new* growth. The solid Green line indicates field presence; notice how it lingers and drops slowly over a few days even after the weather shifts.  Click on any line name in the Key to hide/unhide the line.  Double click them to hide/unhide all other lines.")
+except Exception as e:
+    st.session_state["today_new_growth"] = None
+    st.session_state["today_existing_presence"] = None
+    st.session_state["today_date_label"] = "today"
+    st.error(f"Could not build integrated visual model timelines: {e}")
+
+
+# ---------------------------------------------------------------------------
+# 8. Regional Discovery Macro Scanning Engine (on-demand — does not block top content)
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.subheader("🤔 Island-wide High-Probability Macro Spatial Samples")
+st.caption(
+    "Optional scan of the island for other spots matching the selected species’ soil/weather profile. "
+    "This is slower, so it only runs when you ask for it — the scores and graph above load first."
+)
+
+run_scan = st.button("Run island-wide scan", type="primary", use_container_width=True)
+
+if run_scan:
+    sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
+    if len(sample_pts) > 40:
+        step = max(1, len(sample_pts) // 40)
+        sample_pts = sample_pts[::step]
+
+    viable_spots = []
+    if sample_pts:
+        progress = st.progress(0, text="Scanning island locations…")
+        for i, pt in enumerate(sample_pts):
+            try:
+                w = fetch_live_weather(pt["lat"], pt["lon"])
+                b, _ = get_elevation_bonus(pt["lat"], pt["lon"])
+                sc, _, _ = calculate_growth_and_presence_scores(
+                    w["day_temp"], w["night_temp"], w["lagged_rain_score"],
+                    w["avg_humidity_48h"], w["max_wind_24h"], w["had_frost"],
+                    b, rules, pt["ph"]
+                )
+                if sc >= 45:
+                    viable_spots.append({**pt, "score": sc, "elevation": b * 55})
+            except Exception:
+                pass
+            progress.progress((i + 1) / len(sample_pts), text=f"Scanning… {i+1}/{len(sample_pts)}")
+        progress.empty()
+
+    if viable_spots:
+        gmap = build_growth_conditions_map(viable_spots, zoom=10)
+        st_folium(gmap, width=None, height=450, returned_objects=[], key="iom_regional_discovery_canvas")
+        st.success(f"Discovered **{len(viable_spots)}** highly prospective search corridors within target parameters across the island.")
+    else:
+        st.warning("No high-probability zones currently verified island-wide within target chemical profiles.")
+else:
+    st.info("Tap **Run island-wide scan** when you want to search other locations. The main scores and graph above are already up to date.")
+
+# ---------------------------------------------------------------------------
+# 9. Manual Sandbox Adjustments Controls (Placed at Bottom)
+# ---------------------------------------------------------------------------
+st.markdown("---")
+st.subheader("🧪 Sandbox Area: Manual Condition Testing Overrides")
+st.caption("Adjust these sliders to simulate custom weather fronts and observe how the score metrics fluctuate.")
+
+try:
+    with st.spinner("Streaming metrics from Open-Meteo..."):
+        weather = fetch_live_weather(lat, lon)
+    d_temp = weather["day_temp"]
+    n_temp = weather["night_temp"]
+    rain_index = weather["lagged_rain_score"]
+    avg_rh = weather["avg_humidity_48h"]
+    max_wind = weather["max_wind_24h"]
+    frost_input = weather["had_frost"]
+except:
+    d_temp, n_temp, rain_index, avg_rh, max_wind, frost_input = 11.0, 6.0, 20.0, 92.0, 8.0, False
+
+ov_col1, ov_col2 = st.columns(2)
+with ov_col1:
+    d_temp_sim = st.slider("Simulated Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5)
+    n_temp_sim = st.slider("Simulated Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5)
+    rain_sim = st.slider("Simulated 5-Day Soil Water Charge", 0.0, 50.0, float(rain_index), 0.5)
+with ov_col2:
+    avg_rh_sim = st.slider("Simulated 48h Mean Humidity (%)", 40.0, 100.0, float(avg_rh), 1.0)
+    max_wind_sim = st.slider("Simulated Wind Velocities (knots)", 0.0, 40.0, float(max_wind), 0.5)
+    frost_sim = st.toggle("Override: Hard Ground Frost State Active", value=frost_input)
+
+growth_score, breakdown, verdict = calculate_growth_and_presence_scores(
+    d_temp_sim, n_temp_sim, rain_sim, avg_rh_sim, max_wind_sim, frost_sim, bonus, rules, current_ph
+)
+
+# --- helpers for traffic-light colour + short advice ---
+def _status_colour(level):
+    return {"good": "#1a7f37", "moderate": "#b78100", "poor": "#cf222e"}.get(level, "#57606a")
+
+def _metric_html(label, value_str, level, advice):
+    col = _status_colour(level)
+    return (
+        f'<div style="margin:6px 0 10px 0;padding:8px 10px;border-left:4px solid {col};'
+        f'background:#f6f8fa;border-radius:4px">'
+        f'<span style="font-weight:600;color:{col}">{label}: {value_str}</span><br>'
+        f'<span style="font-size:13px;color:#444">{advice}</span></div>'
     )
 
-    zone_info = None
-    location_error = None
-    display_label = "Selected location"
-    current_ph = None
+diurnal = round(d_temp_sim - n_temp_sim, 1)
+ideal_day = rules.get("ideal_day", (rules["day_min"] + rules["day_max"]) / 2)
+ideal_night = rules.get("ideal_night", (rules["night_min"] + rules["night_max"]) / 2)
+max_diurnal = rules.get("max_diurnal", 7.0)
 
-    if location_mode == "📮 Postcode Zone":
-        selected_outcode = st.sidebar.selectbox(
-            "Select Target Postcode:", list(IOM_POSTCODE_DB.keys())
-        )
-        zone_info = IOM_POSTCODE_DB[selected_outcode]
-        display_label = selected_outcode
-        st.session_state.map_click = None
-
-    elif location_mode == "🔗 Google Maps Link / coords":
-        gmaps_input = st.sidebar.text_input(
-            "Paste a full Maps URL or coordinates:",
-            placeholder="54.150, -4.480  or  https://www.google.com/maps/@54.15,-4.48,15z",
-        )
-        st.sidebar.caption(
-            "Short maps.app.goo.gl links won't work directly — open once in a browser "
-            "and paste the full URL, or paste coordinates from a long-press pin."
-        )
-        display_label = "Pinned location"
-        st.session_state.map_click = None
-        if gmaps_input:
-            try:
-                lat, lon = google_maps_link_to_latlon(gmaps_input)
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {
-                    "name": "Pinned Google Maps location",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus,
-                }
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-            except Exception as e:
-                location_error = str(e)
-
-    else:  # 🗺️ Click on soil-pH map
-        st.sidebar.info(
-            "Click anywhere on the map to set the location. "
-            "Weather, scores and pH update automatically."
-        )
-        display_label = "Map pin"
-
-        # Opacity in sidebar (deliberate; avoids fighting map clicks)
-        st.session_state.ph_opacity = st.sidebar.slider(
-            "Soil pH overlay opacity",
-            min_value=0.0,
-            max_value=1.0,
-            value=float(st.session_state.ph_opacity),
-            step=0.05,
-            key="ph_opacity_slider",
-            help="Drag to fade the pH colour layer in or out.",
-        )
-
-        # Explicit zoom controls — these survive pin drops reliably.
-        # (Mouse-wheel zoom is client-side only and is lost on pin remount;
-        #  use these buttons when you want a zoom level that sticks.)
-        zc1, zc2, zc3, zc4 = st.columns(4)
-        with zc1:
-            if st.button("🔍−", help="Zoom out", use_container_width=True):
-                st.session_state.map_view["zoom"] = max(8, int(st.session_state.map_view["zoom"]) - 1)
-                st.session_state.map_initialized = True
-        with zc2:
-            if st.button("Island", help="Whole Isle of Man", use_container_width=True):
-                st.session_state.map_view = {"lat": 54.23, "lon": -4.55, "zoom": 10}
-                st.session_state.map_initialized = False
-        with zc3:
-            if st.button("🔍+", help="Zoom in", use_container_width=True):
-                st.session_state.map_view["zoom"] = min(16, int(st.session_state.map_view["zoom"]) + 1)
-                st.session_state.map_initialized = True
-        with zc4:
-            st.caption(f"Zoom **{int(st.session_state.map_view['zoom'])}**")
-
-        view = st.session_state.map_view
-        fit_island = not st.session_state.map_initialized
-
-        fmap = build_clickable_ph_map(
-            view["lat"], view["lon"], int(view["zoom"]),
-            st.session_state.map_click, ph_grid,
-            opacity=float(st.session_state.ph_opacity),
-            fit_island=fit_island,
-        )
-
-        # ONLY last_clicked — do not return zoom/center.
-        # Returning zoom/center forces a Streamlit rerun on every pan/zoom,
-        # which remounts the map and causes the "2–3 attempts" behaviour.
-        # key includes map_version so each new pin gets a fresh Leaflet instance.
-        # That clears sticky last_clicked from the previous pin (which otherwise
-        # makes the next pin need a dummy click + tiny mouse move).
-        map_data = st_folium(
-            fmap,
-            width=None,
-            height=520,
-            returned_objects=["last_clicked"],
-            key=f"iom_ph_map_v{st.session_state.map_version}",
-        )
-
-        # Single-click pin drop
-        if map_data and map_data.get("last_clicked"):
-            lat = float(map_data["last_clicked"]["lat"])
-            lon = float(map_data["last_clicked"]["lng"])
-            click_id = (round(lat, 5), round(lon, 5))
-            # Ignore the same last_clicked if we already handled it (sticky value
-            # after remount). Only act on a genuinely new click position.
-            if st.session_state.handled_click_id != click_id:
-                ph = sample_ph(lat, lon, ph_grid)
-                st.session_state.map_click = {"lat": lat, "lon": lon, "ph": ph}
-                st.session_state.map_view["lat"] = lat
-                st.session_state.map_view["lon"] = lon
-                st.session_state.map_initialized = True
-                st.session_state.handled_click_id = click_id
-                st.session_state.map_version += 1
-                st.rerun()
-
-        # Build zone_info from the saved pin so weather/scores render below
-        if st.session_state.map_click:
-            lat = st.session_state.map_click["lat"]
-            lon = st.session_state.map_click["lon"]
-            current_ph = st.session_state.map_click.get("ph")
-            if current_ph is None:
-                current_ph = sample_ph(lat, lon, ph_grid)
-                st.session_state.map_click["ph"] = current_ph
-            try:
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                zone_info = {
-                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus,
-                }
-                st.sidebar.success(f"📍 {lat:.5f}, {lon:.5f}")
-                st.sidebar.caption(f"📐 Elevation: ~{elevation}m (terrain bonus: +{bonus})")
-            except Exception as e:
-                location_error = str(e)
-                zone_info = {
-                    "name": f"Map pin ({lat:.5f}, {lon:.5f})",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": 0,
-                }
-
-        # Prominent legend + large pH block under the map
-        st.markdown(ph_legend_html(current_ph), unsafe_allow_html=True)
-        if ph_grid is None:
-            st.warning(
-                "Soil pH grid file (`iom_ph_grid.json`) not found next to the app "
-                "— pH values cannot be sampled. Overlay may fall back to WMS."
-            )
-
-    if location_error:
-        st.sidebar.error(f"⚠️ {location_error}")
-
-    if zone_info is None:
-        if location_mode == "🗺️ Click on soil-pH map":
-            st.info("👆 Click on the map above to choose a location.")
-        else:
-            st.info("👈 Enter a location in the sidebar to see live data.")
-        st.stop()
-
-    if location_mode != "🗺️ Click on soil-pH map":
-        st.subheader(f"🗺️ {display_label}")
-        render_location_map(
-            zone_info["lat"], zone_info["lon"], zone_info.get("name", display_label)
-        )
-        st.markdown("---")
+# Day temp status
+if rules["day_min"] <= d_temp_sim <= rules["day_max"]:
+    day_level, day_advice = "good", f"Within preferred daytime range ({rules['day_min']}–{rules['day_max']}°C). Ideal centre ≈ {ideal_day}°C."
+elif (rules["day_min"] - 3) <= d_temp_sim <= (rules["day_max"] + 3):
+    day_level, day_advice = "moderate", f"Marginal. Preferred daytime max is {rules['day_min']}–{rules['day_max']}°C (ideal ≈ {ideal_day}°C)."
+else:
+    day_level = "poor"
+    if d_temp_sim > rules["day_max"]:
+        day_advice = f"TOO WARM. Daytime max is above the preferred {rules['day_max']}°C (ideal ≈ {ideal_day}°C)."
     else:
-        st.subheader("🗺️ Map pin selected")
-        st.caption(f"**Location:** {zone_info['name']}")
-        st.markdown("---")
+        day_advice = f"TOO COOL. Daytime max is below the preferred {rules['day_min']}°C (ideal ≈ {ideal_day}°C)."
 
-    # ------------------------------------------------------------------
-    # Live weather + scorecard FIRST (directly under map / pH)
-    # ------------------------------------------------------------------
+# Night temp status
+if rules["night_min"] <= n_temp_sim <= rules["night_max"]:
+    night_level, night_advice = "good", f"Within preferred night range ({rules['night_min']}–{rules['night_max']}°C). Ideal centre ≈ {ideal_night}°C."
+elif (rules["night_min"] - 2) <= n_temp_sim <= (rules["night_max"] + 2):
+    night_level, night_advice = "moderate", f"Marginal. Preferred night min is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+else:
+    night_level = "poor"
+    if n_temp_sim > rules["night_max"]:
+        night_advice = f"TOO WARM at night. Preferred night range is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+    else:
+        night_advice = f"TOO COLD at night. Preferred night range is {rules['night_min']}–{rules['night_max']}°C (ideal ≈ {ideal_night}°C)."
+
+# Diurnal difference
+if diurnal <= max_diurnal:
+    diur_level, diur_advice = "good", f"Day–night difference ({diurnal}°C) is within preferred limit (≤ {max_diurnal}°C). Smaller swings favour fruiting."
+elif diurnal <= max_diurnal + 2:
+    diur_level, diur_advice = "moderate", f"Day–night difference ({diurnal}°C) is a little high. Preferred ≤ {max_diurnal}°C."
+else:
+    diur_level, diur_advice = "poor", f"Large day–night swing ({diurnal}°C). Preferred ≤ {max_diurnal}°C; big swings reduce fruiting likelihood."
+
+# Rain / soil water
+if rain_sim >= rules["rain_trigger"]:
+    rain_level, rain_advice = "good", f"Soil water charge meets or exceeds trigger (≥ {rules['rain_trigger']} pts). Recent moisture is favourable."
+elif rain_sim >= rules["rain_trigger"] / 2:
+    rain_level, rain_advice = "moderate", f"Moderate moisture. Full trigger is ≥ {rules['rain_trigger']} pts."
+else:
+    rain_level, rain_advice = "poor", f"TOO DRY. Soil water charge is below half the trigger ({rules['rain_trigger']} pts)."
+
+# Humidity
+if avg_rh_sim >= 90:
+    rh_level, rh_advice = "good", "High humidity (≥ 90 %) strongly supports pin formation and development."
+elif avg_rh_sim >= 83:
+    rh_level, rh_advice = "moderate", "Humidity is acceptable (83–90 %). ≥ 90 % is ideal."
+elif avg_rh_sim >= 75:
+    rh_level, rh_advice = "moderate", "Humidity is on the low side. ≥ 83 % preferred, ≥ 90 % ideal."
+else:
+    rh_level, rh_advice = "poor", "TOO DRY AIR. Humidity below 75 % strongly suppresses surface growth."
+
+# Wind
+if max_wind_sim <= rules["wind_tolerance"]:
+    wind_level, wind_advice = "good", f"Wind within tolerance (≤ {rules['wind_tolerance']} kn). Low desiccation risk."
+elif max_wind_sim <= rules["wind_tolerance"] + 5:
+    wind_level, wind_advice = "moderate", f"Wind a little high. Preferred ≤ {rules['wind_tolerance']} kn."
+else:
+    wind_level, wind_advice = "poor", f"TOO WINDY. Peak wind above tolerance ({rules['wind_tolerance']} kn) increases drying and can abort pins."
+
+# Frost
+if frost_sim and rules["frost_kill"]:
+    frost_level, frost_advice = "poor", "Hard frost is active — surface fruit bodies are likely killed or prevented."
+else:
+    frost_level, frost_advice = "good", "No hard frost detected."
+
+# pH
+if current_ph is None:
+    ph_level, ph_advice = "moderate", "No local pH sample available for this point."
+    ph_str = "n/a"
+else:
+    ph_str = f"{current_ph:.1f}"
+    if rules["preferred_ph_min"] <= current_ph <= rules["preferred_ph_max"]:
+        ph_level, ph_advice = "good", f"Soil pH inside preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+    else:
+        dist = min(abs(current_ph - rules["preferred_ph_min"]), abs(current_ph - rules["preferred_ph_max"]))
+        if dist <= 0.5:
+            ph_level, ph_advice = "moderate", f"pH close to preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+        else:
+            ph_level, ph_advice = "poor", f"pH outside preferred band ({rules['preferred_ph_min']}–{rules['preferred_ph_max']})."
+
+with score_placeholder:
     left_panel, right_panel = st.columns(2)
-
     with left_panel:
-        st.subheader(f"🎛️ Live Weather Snapshot: {display_label}")
-        try:
-            with st.spinner("Fetching live weather data..."):
-                weather = fetch_live_weather(zone_info["lat"], zone_info["lon"])
-            st.success("Live data loaded from Open-Meteo.")
-            d_temp = weather["day_temp"]
-            n_temp = weather["night_temp"]
-            rain = weather["rain_48h"]
-            frost_input = weather["had_frost"]
-
-            st.metric("Day Temp Max (24h)", f"{d_temp}°C")
-            st.metric("Night Temp Min (24h)", f"{n_temp}°C")
-            st.metric("Rolling 48h Rain", f"{rain}mm")
-            st.write(f"Ground frost detected: {'Yes ❄️' if frost_input else 'No'}")
-
-            st.markdown("---")
-            st.caption("Override values manually if you want to test hypothetical conditions:")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, float(d_temp), 0.5, key="ov_day")
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, float(n_temp), 0.5, key="ov_night")
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, float(rain), 0.5, key="ov_rain")
-            frost_input = st.toggle("Active Ground Frost Event?", value=frost_input, key="ov_frost")
-
-        except Exception as e:
-            st.error(f"⚠️ Could not fetch live weather data ({e}). Falling back to manual input.")
-            d_temp = st.slider("Day Temp Max (°C)", 0.0, 25.0, 12.0, 0.5, key="fb_day")
-            n_temp = st.slider("Night Temp Min (°C)", -5.0, 15.0, 7.0, 0.5, key="fb_night")
-            rain = st.slider("Rolling 48h Rain (mm)", 0.0, 50.0, 15.0, 0.5, key="fb_rain")
-            frost_input = st.toggle("Active Ground Frost Event?", value=False, key="fb_frost")
+        st.subheader("🎛️ Live Weather & Site Metrics")
+        st.markdown(_metric_html("Day Temp Max", f"{d_temp_sim}°C", day_level, day_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Night Temp Min", f"{n_temp_sim}°C", night_level, night_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Day–Night Difference", f"{diurnal}°C", diur_level, diur_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Soil Hydration Score", f"{rain_sim} pts", rain_level, rain_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Mean Relative Humidity", f"{avg_rh_sim}%", rh_level, rh_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Peak Wind Speed", f"{max_wind_sim} kn", wind_level, wind_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Frost Active", "Yes ❄️" if frost_sim else "No", frost_level, frost_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Soil pH (0–5 cm)", ph_str, ph_level, ph_advice), unsafe_allow_html=True)
+        if bonus > 0:
+            st.info(f"⛰️ **Upland Altitude Edge Advantage applied:** +{bonus * 5}% probability bias (elevation ≈ {int(elevation)} m).")
 
     with right_panel:
-        st.subheader("WEATHER CONDITIONS SCORE %")
-
-        prob, verdict, d_s, n_s, r_s = calculate_precise_index(
-            d_temp, n_temp, rain, frost_input, zone_info["upland_offset"], rules
-        )
-
-        st.metric(label=f"NEW GROWTH* Fruiting Probability Score for {display_label}", value=f"{prob}%", border=True)
-
-        st.progress(prob / 100)
-        st.markdown(f"### NEW Growth Status*: {verdict}")
-        st.subheader("*Check Graph below for recent conditions & likeliness of existing growth")
-        st.markdown("---")
-
-        st.markdown("### Score Breakdown")
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"**Day Temp:** {d_temp}°C")
-        c2.markdown(f"⭐ {int((d_s / 35) * 10)}/10")
-        c3.caption(f"Target: {rules['day_min']}-{rules['day_max']}°C")
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"**Night Temp:** {n_temp}°C")
-        c2.markdown(f"⭐ {int((n_s / 25) * 10)}/10")
-        c3.caption(f"Target: {rules['night_min']}-{rules['night_max']}°C")
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"**Recent Rain:** {rain}mm")
-        c2.markdown(f"⭐ {int((r_s / 40) * 10)}/10")
-        c3.caption(f"Target: >={rules['rain_trigger']}mm")
-
-        if zone_info["upland_offset"] > 0:
-            st.info(
-                f"⛰️ **Upland Grazing Bonus:** +{zone_info['upland_offset'] * 5}% "
-                f"terrain advantage mapping applied to {zone_info['name']}."
-            )
-
-    # ------------------------------------------------------------------
-    # Historical trend graph LAST (below scoring)
-    # ------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader(f"📈 Recent Weather & Forecast Trend: {display_label}")
-    st.text(
-        "Use this to line up your own field observations against what the model expected at the time."
-    )
-
-    history_days = st.slider("Days of Weather History to include", 7, 30, 7, key="hist_days")
-
-    try:
-        with st.spinner("Loading trend data..."):
-            dates, day_max, night_min, trend_rain = fetch_historical_daily(
-                zone_info["lat"], zone_info["lon"], days_back=history_days
-            )
-
-        daily_scores = []
-        for i in range(len(dates)):
-            rain_48h = trend_rain[i] + (trend_rain[i - 1] if i > 0 else 0)
-            had_frost = night_min[i] <= 0
-            score, _, _, _, _ = calculate_precise_index(
-                day_max[i], night_min[i], rain_48h, had_frost,
-                zone_info["upland_offset"], rules,
-            )
-            daily_scores.append(score)
-
-        fig = build_trend_chart(
-            dates, day_max, night_min, trend_rain, daily_scores, selected_species
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("BASIC SUMMARY RESULTS")
         st.caption(
-            "🟢 ≥80% · 🟡 50–79% · 🔴 <50% — the thick line's colour follows the same "
-            "probability model as the scorecard above."
+            f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}) — "
+            "taken from the chart lines at the current day (not a future forecast day)."
         )
 
-    except Exception as e:
-        st.error(f"⚠️ Could not load historical trend data ({e}).")
+        # Prefer the chart-derived values so the summary always matches the red/green lines *for today*
+        new_g = st.session_state.get("today_new_growth")
+        exist_g = st.session_state.get("today_existing_presence")
+        if new_g is None:
+            new_g = growth_score          # fallback if chart failed
+        if exist_g is None:
+            exist_g = growth_score
 
+        def _level_from_score(s):
+            if s >= 75: return "good"
+            if s >= 45: return "moderate"
+            return "poor"
 
-    # ------------------------------------------------------------------
-    # Island growth-conditions map (pH 5–6.5, moderate+ scores only)
-    # ------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("🤔 Example areas maybe worth checking out (moderate–excellent growth odds)")
-    st.subheader("*** Please allow about a minute for this map to load as checking for sample points is SLOW (first time then will remain like this for 30 minutes)! 🙄 ***")
-    st.caption("Thankyou for your patience.  Or not - not my issue! 😂😂😂")
-    st.caption(
-        "Coloured dots mark 'some' sample spots with soil pH 5.0–6.5 **and** a live fruiting "
-        "probability of 50% or higher (yellow = moderate, green = excellent). "
-        "Poor (red) scores are hidden. Same scoring model as the scorecard — no pH overlay."
-        "Obviously there may be many other places where conditions have been suitable but it is only possible to show limited samples"
-    )
+        new_level = _level_from_score(new_g)
+        exist_level = _level_from_score(exist_g)
+        new_col = _status_colour(new_level)
+        exist_col = _status_colour(exist_level)
 
-    # Denser sampling (stride 3) for wider coverage; cap API calls sensibly
-    sample_pts = ph_focus_sample_points(ph_grid, ph_min=5.0, ph_max=6.5, stride=3)
-    if len(sample_pts) > 80:
-        step = max(1, len(sample_pts) // 80)
-        sample_pts = sample_pts[::step]
-    if not sample_pts:
-        st.info(
-            "No sample points with pH 5–6.5 found in the local grid. "
-            "Try widening the pH range if you want more coverage."
+        new_advice = {
+            "good": "Conditions today favour fresh pin formation.",
+            "moderate": "Some potential for new pins, but not ideal.",
+            "poor": "Unfavourable for new pin formation today."
+        }[new_level]
+
+        exist_advice = {
+            "good": "High chance of still finding fruit bodies from recent good days.",
+            "moderate": "Moderate chance of finding recently formed fruit bodies.",
+            "poor": "Low chance of finding existing fruit bodies right now."
+        }[exist_level]
+
+        # Large, mobile-friendly display of the two key percentages
+        st.markdown(
+            f'''
+            <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {new_col};
+                        background:#f6f8fa;border-radius:8px">
+              <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
+                🆕 New Growth <span style="font-weight:400;color:#666">(pins forming today)</span>
+              </div>
+              <div style="font-size:42px;font-weight:800;color:{new_col};line-height:1.1;letter-spacing:-0.02em">
+                {new_g}%
+              </div>
+              <div style="font-size:13px;color:#444;margin-top:6px">{new_advice}<br>
+                <span style="color:#888">Matches the dotted red line on the chart for today.</span>
+              </div>
+            </div>
+            ''',
+            unsafe_allow_html=True
         )
-    else:
-        with st.spinner(f"Scoring {len(sample_pts)} pH 5–6.5 sample points…"):
-            scored = []
-            for pt in sample_pts:
-                result = score_point_for_growth(pt["lat"], pt["lon"], selected_species)
-                score = result.get("score")
-                if score is None:
-                    continue
-                # Only moderate (yellow) and excellent (green)
-                if score < 50:
-                    continue
-                scored.append({**pt, **result})
+        st.progress(new_g / 100)
 
-        if not scored:
-            st.info(
-                "No sample points currently score moderate or excellent (50%+). "
-                "Conditions may be poor island-wide for this species right now — "
-                "check again after rain or milder nights."
-            )
+        st.markdown(
+            f'''
+            <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {exist_col};
+                        background:#f6f8fa;border-radius:8px">
+              <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
+                🍄 Existing / Recent Growth <span style="font-weight:400;color:#666">(still findable)</span>
+              </div>
+              <div style="font-size:42px;font-weight:800;color:{exist_col};line-height:1.1;letter-spacing:-0.02em">
+                {exist_g}%
+              </div>
+              <div style="font-size:13px;color:#444;margin-top:6px">{exist_advice}<br>
+                <span style="color:#888">Matches the solid green line on the chart for today.</span>
+              </div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+        st.progress(exist_g / 100)
+
+        # Overall verdict based primarily on new growth, with a nod to presence
+        if new_g >= 75:
+            summary_verdict = "🟩 EXCELLENT: Strong conditions for new pins today."
+        elif new_g >= 45 or exist_g >= 60:
+            summary_verdict = "🟨 MODERATE: Worth checking — either new growth is possible or recent fruit may still be present."
         else:
-            gmap = build_growth_conditions_map(scored, zoom=10)
-            st_folium(
-                gmap,
-                width=None,
-                height=480,
-                returned_objects=[],
-                key="iom_growth_conditions_map",
-            )
-            st.markdown(growth_map_legend_html(), unsafe_allow_html=True)
-            n_green = sum(1 for p in scored if p["score"] >= 80)
-            n_amber = sum(1 for p in scored if 50 <= p["score"] < 80)
+            summary_verdict = "🟥 POOR: Neither new pins nor lingering fruit look likely at this location right now."
+
+        st.markdown(f"### At-a-glance Verdict\n*{summary_verdict}*")
+
+        if breakdown:
+            st.markdown("#### Weighting Influences (underlying model):")
             st.caption(
-                f"Showing **{len(scored)}** promising spots (pH 5–6.5, score ≥50%) · "
-                f"🟢 {n_green} excellent · 🟡 {n_amber} moderate"
+                f"Temp Yield: {breakdown.get('day',0) + breakdown.get('night',0)}/50 pts | "
+                f"Soil Water: {breakdown.get('rain',0)}/30 pts | "
+                f"Humidity Scalar: x{breakdown.get('rh_mod',1):.2f} | "
+                f"Wind Penalty: x{breakdown.get('wind_pen',1):.2f} | "
+                f"Diurnal Penalty: x{breakdown.get('diurnal_pen',1):.2f} | "
+                f"pH Multiplier: x{breakdown.get('ph_mod',1):.2f}"
             )
-
-
-# ==========================================
-# VIEW B: 3-ZONE HEAD-TO-HEAD COMPARISON
-# ==========================================
-else:
-    st.header("⚖️ 3-Zone Head-to-Head Comparison Matrix")
-    st.write(
-        "Compares live current weather across three distinct Manx districts simultaneously. "
-        "Each zone can be a postcode or a custom pinned location:"
-    )
-
-    def render_zone_picker(column, zone_num, default_postcode_index):
-        column.markdown(f"**Zone {zone_num}**")
-        mode = column.radio(
-            "Source:",
-            ["📮 Postcode", "🔗 Maps/Coords"],
-            key=f"zone{zone_num}_mode",
-            label_visibility="collapsed",
-        )
-        if mode == "📮 Postcode":
-            outcode = column.selectbox(
-                "Postcode:",
-                list(IOM_POSTCODE_DB.keys()),
-                index=default_postcode_index,
-                key=f"zone{zone_num}_postcode",
-                label_visibility="collapsed",
-            )
-            return {"label": outcode, **IOM_POSTCODE_DB[outcode]}
-        else:
-            raw = column.text_input(
-                "Location:",
-                placeholder="54.150, -4.480 or Maps URL",
-                key=f"zone{zone_num}_custom",
-                label_visibility="collapsed",
-            )
-            if not raw:
-                return None
-            try:
-                lat, lon = google_maps_link_to_latlon(raw)
-                bonus, elevation = get_elevation_bonus(lat, lon)
-                column.caption(f"📐 ~{elevation}m (bonus +{bonus})")
-                return {
-                    "label": "Custom pin",
-                    "name": "Custom pinned location",
-                    "lat": lat,
-                    "lon": lon,
-                    "upland_offset": bonus,
-                }
-            except Exception as e:
-                column.error(f"⚠️ {e}")
-                return None
-
-    sc1, sc2, sc3 = st.columns(3)
-    comparison_configs = [
-        render_zone_picker(sc1, 1, 0),
-        render_zone_picker(sc2, 2, 3),
-        render_zone_picker(sc3, 3, 8),
-    ]
-
-    panel_columns = st.columns(3)
-
-    for idx, config in enumerate(comparison_configs):
-        with panel_columns[idx]:
-            if config is None:
-                st.info("👈 Enter a location above to see data.")
-                continue
-
-            st.markdown(f"## {config['label']}")
-            st.caption(f"**Region Location:** {config['name']}")
-
-            try:
-                weather = fetch_live_weather(config["lat"], config["lon"])
-                prob, verdict, d_s, n_s, r_s = calculate_precise_index(
-                    weather["day_temp"], weather["night_temp"],
-                    weather["rain_48h"], weather["had_frost"],
-                    config["upland_offset"], rules,
-                )
-                st.metric(label="Calculated Probability Index", value=f"{prob}%")
-                st.progress(prob / 100)
-                st.subheader(verdict.split(":")[0])
-                st.markdown("---")
-                st.markdown("**Live Metrics:**")
-                st.markdown(f"• Day Temp Max: {weather['day_temp']}°C")
-                st.markdown(f"• Night Temp Min: {weather['night_temp']}°C")
-                st.markdown(f"• Rolling 48h Rain: {weather['rain_48h']}mm")
-                st.markdown(f"• Terrain Weighting Bonus: +{config['upland_offset'] * 5}%")
-            except Exception as e:
-                st.error(f"⚠️ Live data unavailable ({e})")
