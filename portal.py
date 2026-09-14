@@ -81,12 +81,12 @@ def sample_ph(lat, lon, grid_meta):
 
 def ph_legend_html(ph_value=None):
     rows = [
-        ("#d73027", "< 5.0", "Highly Acidic"),
-        ("#fc8d59", "5.0 – 5.5", "Moderately Acidic (Optimal for Liberty Caps)"),
-        ("#fee08b", "5.5 – 6.0", "Slightly Acidic (Excellent for Liberty Caps)"),
+        ("#d73027", "< 5.0", "ACIEEEED!!!🙂"),
+        ("#fc8d59", "5.0 – 5.5", "Moderately Acidic (Optimal)"),
+        ("#fee08b", "5.5 – 6.0", "Slightly Acidic (Excellent)"),
         ("#d9ef8b", "6.0 – 6.5", "Near-Neutral (Good crossover zone)"),
-        ("#91cf60", "6.5 – 7.0", "Slightly Alkaline (Good for Field Mushrooms)"),
-        ("#1a9850", "> 7.0", "Alkaline (Optimal for Field Mushrooms)"),
+        ("#91cf60", "6.5 – 7.0", "Slightly Alkaline (Like Duracell)"),
+        ("#1a9850", "> 7.0", "Alkaline (Like Bleach)"),
     ]
     parts = [
         '<div style="font-size:14px;line-height:1.55;'
@@ -464,7 +464,27 @@ if "boom_trigger" not in st.session_state:
     st.session_state.boom_trigger = 0
 
 st.title("🍄 Dr Pablo's Mushroom Magic")
-st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
+# st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
+st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
+st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.  If it's a cool or amusing idea I might do it, but if your suggestion makes me feel that I'd rather shit in my hands and clap, well... maybe not.")
+st.markdown("**HOW TO USE: (TLDR: Basically zoom into the map, click somewhere, read the cool shit that appears below the map. If you're older than 6, or can tie shoelaces then hopefully it's all self explanatory.)**")
+with st.container(gap=1):
+    st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
+    st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH for that spot.")
+    st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time and their difference etc.")
+    st.text("4  This indicates the chance of growth for that location, as long as the pH value of the soil is ideal for the species you want to look for.")
+    st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear trend, including a few days aheasd.")
+    st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
+    st.text("7: Nothing.")
+    st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
+    st.text("8- I lied.  This is the last bit really.  Sort of anyway.  There's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
+st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest them towards Dr Pablo, claim number 69 really loudly, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
+st.caption("**IMPORTANT!**  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")           
+st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for zoom that stays after adding pin.")
+st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
+
+
+
 
 # ACME-style cartoon bomb easter egg — centred modal on top of everything
 _BOMB_HTML = """
@@ -627,9 +647,9 @@ score_placeholder = st.container()
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.subheader("📈 Growth Probability and Condition Trends")
-st.caption("Plots the immediate eruption switch threshold versus lingering field presence over a rolling window.")
+st.caption("Plots the immediate eruption switch threshold versus lingering field presence over a rolling window.      WTF?!  Who wrote that?  Speak English ffs!")
 
-history_days = st.slider("Days of Weather History to include", 7, 30, 9, key="hist_days_slider")
+history_days = st.slider("Days of Weather History to include", 4, 30, 7, key="hist_days_slider")
 
 try:
     dates, h_day, h_night, h_rain, h_rh, h_wind = fetch_historical_daily(lat, lon, days_back=history_days)
@@ -685,13 +705,13 @@ except Exception as e:
 # 8. Regional Discovery Macro Scanning Engine (on-demand — does not block top content)
 # ---------------------------------------------------------------------------
 st.markdown("---")
-st.subheader("🤔 Island-wide High-Probability Macro Spatial Samples")
+st.subheader("🤔 Island-wide Example locations worth a look (maybe)")
 st.caption(
     "Optional scan of the island for other spots matching the selected species’ soil/weather profile. "
     "This is slower, so it only runs when you ask for it — the scores and graph above load first."
 )
 
-run_scan = st.button("Run island-wide scan", type="primary", use_container_width=True)
+run_scan = st.button("**BIG FUCKOFF RED BUTTON**", type="primary", use_container_width=True)
 
 if run_scan:
     sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
@@ -725,7 +745,7 @@ if run_scan:
     else:
         st.warning("No high-probability zones currently verified island-wide within target chemical profiles.")
 else:
-    st.info("Tap **Run island-wide scan** when you want to search other locations. The main scores and graph above are already up to date.")
+    st.info("Tap **BIG FUCKOFF RED BUTTON** when you want to search other locations. The main scores and graph above are already up to date.")
 
 # ---------------------------------------------------------------------------
 # 9. Manual Sandbox Adjustments Controls (Placed at Bottom)
@@ -788,7 +808,7 @@ else:
     if d_temp_sim > rules["day_max"]:
         day_advice = f"TOO WARM. Daytime max is above the preferred {rules['day_max']}°C (ideal ≈ {ideal_day}°C)."
     else:
-        day_advice = f"TOO COOL. Daytime max is below the preferred {rules['day_min']}°C (ideal ≈ {ideal_day}°C)."
+        day_advice = f"TOO COOL (Like Dr Pablo). Daytime max is below the preferred {rules['day_min']}°C (ideal ≈ {ideal_day}°C)."
 
 # Night temp status
 if rules["night_min"] <= n_temp_sim <= rules["night_max"]:
@@ -838,7 +858,7 @@ else:
 
 # Frost
 if frost_sim and rules["frost_kill"]:
-    frost_level, frost_advice = "poor", "Hard frost is active — surface fruit bodies are likely killed or prevented."
+    frost_level, frost_advice = "poor", "Hard frost is active — you're quite likely fucked now for trying."
 else:
     frost_level, frost_advice = "good", "No hard frost detected."
 
@@ -868,15 +888,15 @@ with score_placeholder:
         st.markdown(_metric_html("Mean Relative Humidity", f"{avg_rh_sim}%", rh_level, rh_advice), unsafe_allow_html=True)
         st.markdown(_metric_html("Peak Wind Speed", f"{max_wind_sim} kn", wind_level, wind_advice), unsafe_allow_html=True)
         st.markdown(_metric_html("Frost Active", "Yes ❄️" if frost_sim else "No", frost_level, frost_advice), unsafe_allow_html=True)
-        st.markdown(_metric_html("Soil pH (0–5 cm)", ph_str, ph_level, ph_advice), unsafe_allow_html=True)
+        st.markdown(_metric_html("Soil pH (0–5 cm depth)", ph_str, ph_level, ph_advice), unsafe_allow_html=True)
         if bonus > 0:
-            st.info(f"⛰️ **Upland Altitude Edge Advantage applied:** +{bonus * 5}% probability bias (elevation ≈ {int(elevation)} m).")
+            st.info(f"⛰️ **Upland Altitude Bonus applied:** +{bonus * 5}% probability bias (elevation ≈ {int(elevation)} m).")
 
     with right_panel:
         st.subheader("BASIC SUMMARY RESULTS")
         st.caption(
             f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}) — "
-            "taken from the chart lines at the current day (not a future forecast day)."
+            "taken from the chart lines at the CURRENT DAY (not a future forecast day)."
         )
 
         # Prefer the chart-derived values so the summary always matches the red/green lines *for today*
@@ -898,15 +918,15 @@ with score_placeholder:
         exist_col = _status_colour(exist_level)
 
         new_advice = {
-            "good": "Conditions today favour fresh pin formation.",
+            "good": "Looking good (like Dr Pablo) - Conditions today favour fresh pin formation.",
             "moderate": "Some potential for new pins, but not ideal.",
-            "poor": "Unfavourable for new pin formation today."
+            "poor": "Looks shit for new pin formation today. SOZ!"
         }[new_level]
 
         exist_advice = {
-            "good": "High chance of still finding fruit bodies from recent good days.",
+            "good": "High chance of still finding goodies from recent good days.",
             "moderate": "Moderate chance of finding recently formed fruit bodies.",
-            "poor": "Low chance of finding existing fruit bodies right now."
+            "poor": "You're probably shit out of luck right now.  Like Dr Pablo.🤷‍♂️"
         }[exist_level]
 
         # Large, mobile-friendly display of the two key percentages
@@ -915,7 +935,7 @@ with score_placeholder:
             <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {new_col};
                         background:#f6f8fa;border-radius:8px">
               <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
-                🆕 New Growth <span style="font-weight:400;color:#666">(pins forming today)</span>
+                🆕 New Growth Probability <span style="font-weight:400;color:#666">('pins' forming today)</span>
               </div>
               <div style="font-size:42px;font-weight:800;color:{new_col};line-height:1.1;letter-spacing:-0.02em">
                 {new_g}%
@@ -934,7 +954,7 @@ with score_placeholder:
             <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {exist_col};
                         background:#f6f8fa;border-radius:8px">
               <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
-                🍄 Existing / Recent Growth <span style="font-weight:400;color:#666">(still findable)</span>
+                🍄 Existing / Recent Growth Probability <span style="font-weight:400;color:#666">(still findable)</span>
               </div>
               <div style="font-size:42px;font-weight:800;color:{exist_col};line-height:1.1;letter-spacing:-0.02em">
                 {exist_g}%
@@ -950,11 +970,11 @@ with score_placeholder:
 
         # Overall verdict based primarily on new growth, with a nod to presence
         if new_g >= 75:
-            summary_verdict = "🟩 EXCELLENT: Strong conditions for new pins today."
+            summary_verdict = "🟩 GET THE FUCK IN!!!: Strong conditions for new 'pin' growth today."
         elif new_g >= 45 or exist_g >= 60:
-            summary_verdict = "🟨 MODERATE: Worth checking — either new growth is possible or recent fruit may still be present."
+            summary_verdict = "🟨 MAYBE. BUT MAYBE NOT: Worth checking — either new growth is possible or recent fruit may still be present."
         else:
-            summary_verdict = "🟥 POOR: Neither new pins nor lingering fruit look likely at this location right now."
+            summary_verdict = "🟥 PRETTY WANK: Neither new pins nor lingering fruit look likely at this location right now. Hope harder..."
 
         st.markdown(f"### At-a-glance Verdict\n*{summary_verdict}*")
 
