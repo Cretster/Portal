@@ -757,23 +757,14 @@ if run_scan:
             progress.progress((i + 1) / len(sample_pts), text=f"Scanning… {i+1}/{len(sample_pts)}")
         progress.empty()
 
-    # Prefer green (optimal) spots; only fall back to yellow (moderate) if none are green
-    if green_spots:
-        viable_spots = green_spots
-        tier_label = "optimal (green)"
-    elif yellow_spots:
-        viable_spots = yellow_spots
-        tier_label = "moderate (yellow) — no optimal spots found right now"
-    else:
-        viable_spots = []
-        tier_label = None
-
+    # Show greens first (optimal), then any yellows (moderate) from the same scan
+    viable_spots = green_spots + yellow_spots
     if viable_spots:
         gmap = build_growth_conditions_map(viable_spots, zoom=10)
         st_folium(gmap, width=None, height=450, returned_objects=[], key="iom_regional_discovery_canvas")
         st.success(
-            f"Showing **{len(viable_spots)}** {tier_label} locations "
-            f"matching the selected species’ profile across the island."
+            f"Showing **{len(green_spots)}** optimal (green) and **{len(yellow_spots)}** moderate (yellow) "
+            f"locations matching the selected species’ profile across the island."
         )
     else:
         st.warning("No moderate or optimal zones currently verified island-wide within target chemical profiles.")
