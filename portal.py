@@ -469,8 +469,18 @@ st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo indust
 st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.  If it's a cool or amusing idea I might do it, but if your suggestion makes me feel that I'd rather shit in my hands and clap, well... maybe not.")
 st.markdown("**TLDR:** Zoom into the map, click somewhere, read the cool shit that appears below. If you're older than 6 or can tie shoelaces, it's hopefully self-explanatory.")
 
-show_instructions = st.button("Click for detailed instructions", type="primary", use_container_width=True)
-if show_instructions:
+if "show_instructions" not in st.session_state:
+    st.session_state.show_instructions = False
+
+# Toggle button — keeps state across reruns and forces the map to remount cleanly
+_btn_label = "Hide detailed instructions" if st.session_state.show_instructions else "Click for detailed instructions"
+if st.button(_btn_label, type="primary", use_container_width=True, key="toggle_instructions_btn"):
+    st.session_state.show_instructions = not st.session_state.show_instructions
+    # Bump map key so streamlit-folium remounts after the layout change above it
+    st.session_state.map_version = st.session_state.get("map_version", 0) + 1
+    st.rerun()
+
+if st.session_state.show_instructions:
     st.markdown("**HOW TO USE:**")
     with st.container(gap=1):
         st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
