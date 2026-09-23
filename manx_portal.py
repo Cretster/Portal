@@ -467,19 +467,34 @@ st.title("🍄 Dr Pablo's Mushroom Magic")
 # st.caption("Advanced Time-Lagged Predictive Biological Growth Algorithm — Isle of Man Exclusive Spatial Grid.")
 st.caption("Welcome to Dr Pablo's mushroom finder page.  Here at Dr Pablo industries we recognise that these tasty & healthy natural treats can be sometimes be a touch elusive. This page can help you check current/recent conditions likely to stimulate their growth, for any area you choose.")
 st.text("Note: I'm interested in suggestions for improvements to the page if you can be arsed and think this page might actually be helpful.  Try me anyway.  If it's a cool or amusing idea I might do it, but if your suggestion makes me feel that I'd rather shit in my hands and clap, well... maybe not.")
-st.markdown("**HOW TO USE: (TLDR: Basically zoom into the map, click somewhere, read the cool shit that appears below the map. If you're older than 6, or can tie shoelaces then hopefully it's all self explanatory.)**")
-with st.container(gap=1):
-    st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
-    st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH for that spot.")
-    st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time and their difference etc.")
-    st.text("4  This indicates the chance of growth for that location, as long as the pH value of the soil is ideal for the species you want to look for.")
-    st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear trend, including a few days aheasd.")
-    st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
-    st.text("7: Nothing.")
-    st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
-    st.text("8- I lied.  This is the last bit really.  Sort of anyway.  There's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
-st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest them towards Dr Pablo, claim number 69 really loudly, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
-st.caption("**IMPORTANT!**  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")           
+st.markdown("**TLDR:** Zoom into the map, click somewhere, read the cool shit that appears below. If you're older than 6 or can tie shoelaces, it's hopefully self-explanatory.")
+
+if "show_instructions" not in st.session_state:
+    st.session_state.show_instructions = False
+
+# Toggle button — keeps state across reruns and forces the map to remount cleanly
+_btn_label = "Hide detailed instructions" if st.session_state.show_instructions else "Click for detailed instructions"
+if st.button(_btn_label, type="primary", use_container_width=True, key="toggle_instructions_btn"):
+    st.session_state.show_instructions = not st.session_state.show_instructions
+    # Bump map key so streamlit-folium remounts after the layout change above it
+    st.session_state.map_version = st.session_state.get("map_version", 0) + 1
+    st.rerun()
+
+if st.session_state.show_instructions:
+    st.markdown("**HOW TO USE:**")
+    with st.container(gap=1):
+        st.text("1) Use the Zoom (+/-) buttons (for reliability compared to screen pinch), then Click on a location you're interested in on the map.")
+        st.text("💣 Then once you have clicked a spot, weather patterns will be retrieved and shown below the map, along with the soil pH for that spot.")
+        st.text("C) Using this information a score for the location is given, based on rainfall over the last 48 hours and temperatures for daytime/night time and their difference etc.")
+        st.text("4  This indicates the chance of growth for that location, as long as the pH value of the soil is ideal for the species you want to look for.")
+        st.text("v) You can see also historical weather data (and adjust the number of days to be shown) so that the graph will show you all the data in a linear trend, including a few days aheasd.")
+        st.text("Six) You can then observe from the thicker multicolour line on the graph any points in the last X days where growth would have been likely, and may remain in place.")
+        st.text("7: Nothing.")
+        st.text("69) This is actually the last bit.  There are also slider controls that you can experiment with if you want to see what the score would be under different conditions.")
+        st.text("8- I lied.  This is the last bit really.  Sort of anyway.  There's a **BIG FUCKOFF RED BUTTON** to launch a second map, which (after a minute or so) shows random samples of places which currently have a moderate to high chance of new growth at the moment.")
+    st.caption("Nothing is guaranteed. In life.  It's the same for this page.  If you have any gripes (about the page or life) then please focus those thoughts with powerful intention to manifest them towards Dr Pablo, claim number 69 really loudly, and I'm absolutely certain he will receive them through the ether.  Thankyou for your attention.  Go about your business and be happy.  Alternatively, please send an email detailing your concerns to idgaf@idgaf..com")
+    st.caption("**IMPORTANT!**  Don't do anything naughty, and don't eat poisonous fungus.  It's up to you entirely to know what you're doing. Dr Pablo doesn't know what he's doing, he's a fucking idiot. Don't be like Dr Pablo.")
+
 st.subheader("🥷 Use 🔍+/🔍− (instead of pinching screen) for zoom that stays after adding pin.")
 st.caption("🍄 Colour shading on the map indicates typical soil acidity over the island as per colour key lower down")
 
@@ -715,11 +730,12 @@ run_scan = st.button("**BIG FUCKOFF RED BUTTON**", type="primary", use_container
 
 if run_scan:
     sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
-    if len(sample_pts) > 40:
-        step = max(1, len(sample_pts) // 40)
+    if len(sample_pts) >60:
+        step = max(1, len(sample_pts) // 60)
         sample_pts = sample_pts[::step]
 
-    viable_spots = []
+    green_spots = []   # optimal / excellent (≥ 75)
+    yellow_spots = []  # moderate (≥ 45)
     if sample_pts:
         progress = st.progress(0, text="Scanning island locations…")
         for i, pt in enumerate(sample_pts):
@@ -731,19 +747,27 @@ if run_scan:
                     w["avg_humidity_48h"], w["max_wind_24h"], w["had_frost"],
                     b, rules, pt["ph"]
                 )
-                if sc >= 45:
-                    viable_spots.append({**pt, "score": sc, "elevation": b * 55})
+                entry = {**pt, "score": sc, "elevation": b * 55}
+                if sc >= 75:
+                    green_spots.append(entry)
+                elif sc >= 45:
+                    yellow_spots.append(entry)
             except Exception:
                 pass
             progress.progress((i + 1) / len(sample_pts), text=f"Scanning… {i+1}/{len(sample_pts)}")
         progress.empty()
 
+    # Show greens first (optimal), then any yellows (moderate) from the same scan
+    viable_spots = green_spots + yellow_spots
     if viable_spots:
         gmap = build_growth_conditions_map(viable_spots, zoom=10)
         st_folium(gmap, width=None, height=450, returned_objects=[], key="iom_regional_discovery_canvas")
-        st.success(f"Discovered **{len(viable_spots)}** highly prospective search corridors within target parameters across the island.")
+        st.success(
+            f"Showing **{len(green_spots)}** optimal (green) and **{len(yellow_spots)}** moderate (yellow) "
+            f"locations matching the selected species’ profile across the island."
+        )
     else:
-        st.warning("No high-probability zones currently verified island-wide within target chemical profiles.")
+        st.warning("No moderate or optimal zones currently verified island-wide within target chemical profiles.")
 else:
     st.info("Tap **BIG FUCKOFF RED BUTTON** when you want to search other locations. The main scores and graph above are already up to date.")
 
