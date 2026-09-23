@@ -730,8 +730,8 @@ run_scan = st.button("**BIG FUCKOFF RED BUTTON**", type="primary", use_container
 
 if run_scan:
     sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
-    if len(sample_pts) > 40:
-        step = max(1, len(sample_pts) // 40)
+    if len(sample_pts) >60:
+        step = max(1, len(sample_pts) // 60)
         sample_pts = sample_pts[::step]
 
     green_spots = []   # optimal / excellent (≥ 75)
