@@ -730,8 +730,8 @@ run_scan = st.button("**BIG FUCKOFF RED BUTTON**", type="primary", use_container
 
 if run_scan:
     sample_pts = ph_focus_sample_points(ph_grid, ph_min=rules["preferred_ph_min"], ph_max=rules["preferred_ph_max"], stride=4)
-    if len(sample_pts) >60:
-        step = max(1, len(sample_pts) // 60)
+    if len(sample_pts) > 40:
+        step = max(1, len(sample_pts) // 40)
         sample_pts = sample_pts[::step]
 
     green_spots = []   # optimal / excellent (≥ 75)
@@ -803,6 +803,33 @@ with ov_col2:
 growth_score, breakdown, verdict = calculate_growth_and_presence_scores(
     d_temp_sim, n_temp_sim, rain_sim, avg_rh_sim, max_wind_sim, frost_sim, bonus, rules, current_ph
 )
+
+# Bold simulated score shown directly under the sandbox sliders
+def _sim_level(s):
+    if s >= 75: return "good", "#1a7f37"
+    if s >= 45: return "moderate", "#b78100"
+    return "poor", "#cf222e"
+
+_sim_lvl, _sim_col = _sim_level(growth_score)
+st.markdown(
+    f'''
+    <div style="margin:16px 0 8px 0;padding:16px 18px;border-left:6px solid {_sim_col};
+                background:#f0f4f8;border-radius:8px">
+      <div style="font-size:16px;font-weight:700;color:#333;margin-bottom:4px">
+        🧪 Simulated live values — New Growth Probability
+      </div>
+      <div style="font-size:48px;font-weight:800;color:{_sim_col};line-height:1.05;letter-spacing:-0.02em">
+        {growth_score}%
+      </div>
+      <div style="font-size:13px;color:#444;margin-top:6px">
+        Score from the slider positions above (what-if sandbox). Does not change the main summary or chart.
+      </div>
+    </div>
+    ''',
+    unsafe_allow_html=True,
+)
+st.progress(growth_score / 100)
+st.caption(f"Sandbox verdict: *{verdict}*")
 
 # --- helpers for traffic-light colour + short advice ---
 def _status_colour(level):
@@ -920,14 +947,14 @@ with score_placeholder:
         st.subheader("BASIC SUMMARY RESULTS")
         st.caption(
             f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}) — "
-            "taken from the chart lines at the CURRENT DAY (not a future forecast day)."
+            "taken from the chart lines at the current day (not affected by sandbox sliders)."
         )
 
-        # Prefer the chart-derived values so the summary always matches the red/green lines *for today*
+        # Always use chart-derived real-weather values for the main summary
         new_g = st.session_state.get("today_new_growth")
         exist_g = st.session_state.get("today_existing_presence")
         if new_g is None:
-            new_g = growth_score          # fallback if chart failed
+            new_g = growth_score
         if exist_g is None:
             exist_g = growth_score
 
@@ -953,7 +980,6 @@ with score_placeholder:
             "poor": "You're probably shit out of luck right now.  Like Dr Pablo.🤷‍♂️"
         }[exist_level]
 
-        # Large, mobile-friendly display of the two key percentages
         st.markdown(
             f'''
             <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {new_col};
@@ -992,7 +1018,6 @@ with score_placeholder:
         )
         st.progress(exist_g / 100)
 
-        # Overall verdict based primarily on new growth, with a nod to presence
         if new_g >= 75:
             summary_verdict = "🟩 GET THE FUCK IN!!!: Strong conditions for new 'pin' growth today."
         elif new_g >= 45 or exist_g >= 60:
