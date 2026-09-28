@@ -804,6 +804,33 @@ growth_score, breakdown, verdict = calculate_growth_and_presence_scores(
     d_temp_sim, n_temp_sim, rain_sim, avg_rh_sim, max_wind_sim, frost_sim, bonus, rules, current_ph
 )
 
+# Bold simulated score shown directly under the sandbox sliders
+def _sim_level(s):
+    if s >= 75: return "good", "#1a7f37"
+    if s >= 45: return "moderate", "#b78100"
+    return "poor", "#cf222e"
+
+_sim_lvl, _sim_col = _sim_level(growth_score)
+st.markdown(
+    f'''
+    <div style="margin:16px 0 8px 0;padding:16px 18px;border-left:6px solid {_sim_col};
+                background:#f0f4f8;border-radius:8px">
+      <div style="font-size:16px;font-weight:700;color:#333;margin-bottom:4px">
+        🧪 Simulated live values — New Growth Probability
+      </div>
+      <div style="font-size:48px;font-weight:800;color:{_sim_col};line-height:1.05;letter-spacing:-0.02em">
+        {growth_score}%
+      </div>
+      <div style="font-size:13px;color:#444;margin-top:6px">
+        Score from the slider positions above (what-if sandbox). Does not change the main summary or chart.
+      </div>
+    </div>
+    ''',
+    unsafe_allow_html=True,
+)
+st.progress(growth_score / 100)
+st.caption(f"Sandbox verdict: *{verdict}*")
+
 # --- helpers for traffic-light colour + short advice ---
 def _status_colour(level):
     return {"good": "#1a7f37", "moderate": "#b78100", "poor": "#cf222e"}.get(level, "#57606a")
@@ -918,28 +945,18 @@ with score_placeholder:
 
     with right_panel:
         st.subheader("BASIC SUMMARY RESULTS")
+        st.caption(
+            f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}) — "
+            "taken from the chart lines at the current day (not affected by sandbox sliders)."
+        )
 
-        # New Growth tracks the live metrics / sandbox sliders (growth_score).
-        # Existing Growth stays on the chart's lagged real-weather value.
-        chart_new = st.session_state.get("today_new_growth")
+        # Always use chart-derived real-weather values for the main summary
+        new_g = st.session_state.get("today_new_growth")
         exist_g = st.session_state.get("today_existing_presence")
+        if new_g is None:
+            new_g = growth_score
         if exist_g is None:
             exist_g = growth_score
-        new_g = growth_score  # always reflects current left-panel conditions (live or sandbox)
-
-        sandbox_active = (chart_new is not None and int(chart_new) != int(growth_score))
-        if sandbox_active:
-            st.caption(
-                f"🧪 **Sandbox active** — New Growth below follows your slider overrides. "
-                f"Live chart value for today ({st.session_state.get('today_date_label', 'today')}) was **{chart_new}%** "
-                f"(dotted red line). Existing Growth still uses real lagged weather."
-            )
-        else:
-            st.caption(
-                f"Scores for **today’s date** ({st.session_state.get('today_date_label', 'today')}). "
-                f"New Growth matches the conditions shown on the left (and the dotted red chart line when sliders are at live values). "
-                f"Existing Growth matches the solid green chart line."
-            )
 
         def _level_from_score(s):
             if s >= 75: return "good"
@@ -952,9 +969,9 @@ with score_placeholder:
         exist_col = _status_colour(exist_level)
 
         new_advice = {
-            "good": "Looking good (like Dr Pablo) - Conditions favour fresh pin formation.",
+            "good": "Looking good (like Dr Pablo) - Conditions today favour fresh pin formation.",
             "moderate": "Some potential for new pins, but not ideal.",
-            "poor": "Looks shit for new pin formation. SOZ!"
+            "poor": "Looks shit for new pin formation today. SOZ!"
         }[new_level]
 
         exist_advice = {
@@ -963,25 +980,18 @@ with score_placeholder:
             "poor": "You're probably shit out of luck right now.  Like Dr Pablo.🤷‍♂️"
         }[exist_level]
 
-        new_source_note = (
-            "Driven by the weather metrics / sandbox sliders on the left."
-            if sandbox_active else
-            "Matches the dotted red line on the chart for today."
-        )
-
-        # Large, mobile-friendly display of the two key percentages
         st.markdown(
             f'''
             <div style="margin:10px 0 14px 0;padding:14px 16px;border-left:6px solid {new_col};
                         background:#f6f8fa;border-radius:8px">
               <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:4px">
-                🆕 New Growth Probability <span style="font-weight:400;color:#666">('pins' forming)</span>
+                🆕 New Growth Probability <span style="font-weight:400;color:#666">('pins' forming today)</span>
               </div>
               <div style="font-size:42px;font-weight:800;color:{new_col};line-height:1.1;letter-spacing:-0.02em">
                 {new_g}%
               </div>
               <div style="font-size:13px;color:#444;margin-top:6px">{new_advice}<br>
-                <span style="color:#888">{new_source_note}</span>
+                <span style="color:#888">Matches the dotted red line on the chart for today.</span>
               </div>
             </div>
             ''',
@@ -1000,7 +1010,7 @@ with score_placeholder:
                 {exist_g}%
               </div>
               <div style="font-size:13px;color:#444;margin-top:6px">{exist_advice}<br>
-                <span style="color:#888">Matches the solid green line on the chart for today (not affected by sandbox sliders).</span>
+                <span style="color:#888">Matches the solid green line on the chart for today.</span>
               </div>
             </div>
             ''',
@@ -1008,13 +1018,12 @@ with score_placeholder:
         )
         st.progress(exist_g / 100)
 
-        # Overall verdict based primarily on new growth, with a nod to presence
         if new_g >= 75:
-            summary_verdict = "🟩 GET THE FUCK IN!!!: Strong conditions for new 'pin' growth."
+            summary_verdict = "🟩 GET THE FUCK IN!!!: Strong conditions for new 'pin' growth today."
         elif new_g >= 45 or exist_g >= 60:
             summary_verdict = "🟨 MAYBE. BUT MAYBE NOT: Worth checking — either new growth is possible or recent fruit may still be present."
         else:
-            summary_verdict = "🟥 PRETTY WANK: Neither new pins nor lingering fruit look likely under these conditions. Hope harder..."
+            summary_verdict = "🟥 PRETTY WANK: Neither new pins nor lingering fruit look likely at this location right now. Hope harder..."
 
         st.markdown(f"### At-a-glance Verdict\n*{summary_verdict}*")
 
